@@ -39,3 +39,6 @@ build/
 
 ### Uploads ###
 uploads/
+
+### Temporary Testing Files ###
+test-ws.html
