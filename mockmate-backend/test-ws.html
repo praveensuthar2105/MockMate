@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MockMate WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background: #f9fafb; color: #111827; }
+        .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .log-box { background: #1f2937; color: #10b981; padding: 15px; border-radius: 6px; font-family: monospace; white-space: pre-wrap; height: 300px; overflow-y: auto; }
+        input[type="text"] { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
+        button { background: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #4338ca; }
+        .system { color: #f59e0b; }
+        .you { color: #60a5fa; }
+        .ai { color: #10b981; }
+    </style>
+</head>
+<body>
+    <h2>MockMate Real-time STOMP Tester</h2>
+    
+    <div class="box">
+        <label><b>1. JWT Token (Bearer)</b></label>
+        <input type="text" id="token" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+        
+        <label><b>2. Interview Session ID</b></label>
+        <input type="text" id="sessionId" placeholder="1" />
+        
+        <button onclick="connect()">Connect & Subscribe</button>
+        <button onclick="disconnect()" style="background: #ef4444;">Disconnect</button>
+    </div>
+
+    <div class="box">
+        <label><b>3. Send Answer</b></label>
+        <input type="text" id="myMessage" placeholder="I used a HashMap to keep lookups O(1)" />
+        <button onclick="sendMessage()">Send to AI</button>
+    </div>
+
+    <h3>Live Event Logs</h3>
+    <div id="messages" class="log-box">Waiting to connect...</div>
+
+    <script>
+        let stompClient = null;
+
+        function log(message, type = 'system') {
+            const el = document.getElementById('messages');
+            const time = new Date().toLocaleTimeString();
+            el.innerHTML += `<span class="${type}">[${time}] ${message}</span>\n`;
+            el.scrollTop = el.scrollHeight; // auto-scroll
+        }
+
+        function connect() {
+            const token = document.getElementById('token').value.trim();
+            const sessionId = document.getElementById('sessionId').value.trim();
+
+            if (!token || !sessionId) {
+                alert("Please enter both Token and Session ID!");
+                return;
+            }
+
+            const socket = new SockJS('http://localhost:8080/ws');
+            stompClient = Stomp.over(socket);
+            
+            // Disable verbose console logging from StompJS
+            stompClient.debug = null;
+
+            log("Attempting to connect with token...", "system");
+
+            stompClient.connect({ Authorization: 'Bearer ' + token }, function (frame) {
+                log("✅ CONNECTED SUCCESSFULLY!", "system");
+                
+                // Subscribe
+                const topic = '/topic/session/' + sessionId;
+                log(`📡 Subscribing to ${topic}...`, "system");
+                
+                stompClient.subscribe(topic, function (message) {
+                    const event = JSON.parse(message.body);
+                    if (event.type === 'MESSAGE') {
+                        log(`🤖 AI: ${event.content}`, "ai");
+                    } else if (event.type === 'TYPING') {
+                        log(`✍️ AI is typing...`, "system");
+                    } else if (event.type === 'TIMER_UPDATE') {
+                        // log(`⏱️ Time remaining: ${event.timeRemainingSeconds}s`, "system");
+                    } else if (event.type === 'PHASE_CHANGE') {
+                        log(`⏩ PHASE CHANGED TO: ${event.phase || "COMPLETE!"}`, "system");
+                    } else {
+                        log(`📦 EVENT: ${JSON.stringify(event)}`, "system");
+                    }
+                });
+
+            }, function(error) {
+                log(`❌ ERROR: ${error}`, "system");
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+                log("🔌 Disconnected.");
+            }
+        }
+
+        function sendMessage() {
+            const sessionId = document.getElementById('sessionId').value.trim();
+            const content = document.getElementById('myMessage').value.trim();
+            
+            if (stompClient && content) {
+                const payload = JSON.stringify({ content: content });
+                stompClient.send('/app/interview/' + sessionId + '/message', {}, payload);
+                log(`🗣️ YOU: ${content}`, "you");
+                document.getElementById('myMessage').value = ''; // clear input
+            } else {
+                alert("Please connect first and type a message!");
+            }
+        }
+    </script>
+</body>
+</html>

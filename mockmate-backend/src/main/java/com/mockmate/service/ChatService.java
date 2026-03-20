@@ -1,0 +1,201 @@
+package com.mockmate.service;
+
+import com.mockmate.dto.response.ChatResponse;
+import com.mockmate.model.*;
+import com.mockmate.repository.ChatMessageRepository;
+import com.mockmate.repository.InterviewSessionRepository;
+import com.mockmate.repository.ResumeRepository;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ChatService {
+
+        private final ChatLanguageModel chatLanguageModel;
+        private final ChatMessageRepository chatMessageRepository;
+        private final InterviewSessionRepository sessionRepository;
+        private final ResumeRepository resumeRepository;
+
+        private String baseContextTemplate;
+        private String resumeScreenTemplate;
+        private String dsaTemplate;
+        private String systemDesignTemplate;
+        private String hrTemplate;
+
+        @PostConstruct
+        public void loadPromptTemplates() {
+                baseContextTemplate = loadTemplate("prompts/base-context.txt");
+                resumeScreenTemplate = loadTemplate("prompts/resume-screen.txt");
+                dsaTemplate = loadTemplate("prompts/dsa.txt");
+                systemDesignTemplate = loadTemplate("prompts/system-design.txt");
+                hrTemplate = loadTemplate("prompts/hr.txt");
+                log.info("All prompt templates loaded successfully");
+        }
+
+        private String loadTemplate(String path) {
+                try {
+                        return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                        log.error("Failed to load prompt template: {}", path, e);
+                        throw new RuntimeException("Failed to load prompt template: " + path, e);
+                }
+        }
+
+        @Transactional
+        public ChatResponse processMessage(Long sessionId, String userMessage) {
+                InterviewSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Interview session not found"));
+
+                if (session.getStatus() == SessionStatus.COMPLETED) {
+                        throw new RuntimeException("Interview session is already completed");
+                }
+
+                // Save user message
+                ChatMessage userMsg = new ChatMessage();
+                userMsg.setSession(session);
+                userMsg.setRole(Role.USER);
+                userMsg.setContent(userMessage);
+                userMsg.setPhaseType(session.getCurrentPhase());
+                chatMessageRepository.save(userMsg);
+
+                // Build conversation history and get AI response
+                String aiResponseText = getAiResponse(session, userMessage);
+
+                // Save AI response
+                ChatMessage aiMsg = new ChatMessage();
+                aiMsg.setSession(session);
+                aiMsg.setRole(Role.AI);
+                aiMsg.setContent(aiResponseText);
+                aiMsg.setPhaseType(session.getCurrentPhase());
+                ChatMessage savedAiMsg = chatMessageRepository.save(aiMsg);
+
+                log.info("Chat processed for session {}, phase {}", sessionId, session.getCurrentPhase());
+
+                return ChatResponse.builder()
+                                .id(savedAiMsg.getId())
+                                .role(Role.AI)
+                                .content(aiResponseText)
+                                .phaseType(session.getCurrentPhase())
+                                .createdAt(savedAiMsg.getCreatedAt())
+                                .build();
+        }
+
+        public List<ChatResponse> getChatHistory(Long sessionId) {
+                return chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId).stream()
+                                .map(msg -> ChatResponse.builder()
+                                                .id(msg.getId())
+                                                .role(msg.getRole())
+                                                .content(msg.getContent())
+                                                .phaseType(msg.getPhaseType())
+                                                .createdAt(msg.getCreatedAt())
+                                                .build())
+                                .toList();
+        }
+
+        @Transactional
+        public ChatMessage saveAiMessage(InterviewSession session, String aiResponseText) {
+                ChatMessage aiMsg = new ChatMessage();
+                aiMsg.setSession(session);
+                aiMsg.setRole(Role.AI);
+                aiMsg.setContent(aiResponseText);
+                aiMsg.setPhaseType(session.getCurrentPhase());
+                return chatMessageRepository.save(aiMsg);
+        }
+
+        private String getAiResponse(InterviewSession session, String userMessage) {
+                String systemPrompt = buildSystemPrompt(session);
+
+                List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
+                messages.add(SystemMessage.from(systemPrompt));
+
+                List<ChatMessage> history = chatMessageRepository
+                                .findBySessionIdOrderByCreatedAtAsc(session.getId());
+                for (ChatMessage msg : history) {
+                        if (msg.getRole() == Role.USER) {
+                                messages.add(UserMessage.from(msg.getContent()));
+                        } else {
+                                messages.add(AiMessage.from(msg.getContent()));
+                        }
+                }
+
+                messages.add(UserMessage.from(userMessage));
+
+                ChatRequest chatRequest = ChatRequest.builder()
+                                .messages(messages)
+                                .build();
+                var response = chatLanguageModel.chat(chatRequest);
+                return response.aiMessage().text();
+        }
+
+        private String buildSystemPrompt(InterviewSession session) {
+                String resumeJson = resumeRepository.findByUserId(session.getUser().getId())
+                                .map(r -> r.getParsedJson() != null ? r.getParsedJson() : r.getRawText())
+                                .orElse("{}");
+
+                String company = session.getCompany();
+                String difficulty = session.getDifficulty() != null ? session.getDifficulty().name() : "UNKNOWN";
+                PhaseType phase = session.getCurrentPhase();
+                int duration = getDurationForPhase(session, phase);
+
+                // Replace placeholders in base context
+                String baseContext = replacePlaceholders(baseContextTemplate, Map.of(
+                                "company", company,
+                                "difficulty", difficulty,
+                                "phase", phase.name(),
+                                "duration", String.valueOf(duration)));
+
+                // Replace placeholders in phase-specific template
+                String phasePrompt = switch (phase) {
+                        case RESUME_SCREEN -> replacePlaceholders(resumeScreenTemplate, Map.of(
+                                        "company", company,
+                                        "difficulty", difficulty,
+                                        "resumeJson", resumeJson));
+                        case DSA -> replacePlaceholders(dsaTemplate, Map.of(
+                                        "company", company,
+                                        "difficulty", difficulty));
+                        case SYSTEM_DESIGN -> replacePlaceholders(systemDesignTemplate, Map.of(
+                                        "company", company,
+                                        "difficulty", difficulty));
+                        case HR -> replacePlaceholders(hrTemplate, Map.of(
+                                        "company", company,
+                                        "difficulty", difficulty,
+                                        "resumeJson", resumeJson));
+                };
+
+                return baseContext + "\n" + phasePrompt;
+        }
+
+        private String replacePlaceholders(String template, Map<String, String> variables) {
+                String result = template;
+                for (Map.Entry<String, String> entry : variables.entrySet()) {
+                        result = result.replace("{{" + entry.getKey() + "}}", entry.getValue());
+                }
+                return result;
+        }
+
+        private int getDurationForPhase(InterviewSession session, PhaseType phase) {
+                return switch (phase) {
+                        case RESUME_SCREEN -> session.getResumeDurationMins();
+                        case DSA -> session.getDsaDurationMins();
+                        case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
+                        case HR -> session.getHrDurationMins();
+                };
+        }
+}
