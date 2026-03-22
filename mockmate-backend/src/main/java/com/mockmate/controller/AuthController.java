@@ -3,6 +3,7 @@ package com.mockmate.controller;
 import com.mockmate.dto.request.LoginRequest;
 import com.mockmate.dto.request.RefreshTokenRequest;
 import com.mockmate.dto.request.RegisterRequest;
+import com.mockmate.dto.request.UpdateProfileRequest;
 import com.mockmate.dto.response.AuthResponse;
 import com.mockmate.service.AuthService;
 import jakarta.validation.Valid;
@@ -30,5 +31,12 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         return ResponseEntity.ok(authService.refreshToken(request));
+    }
+
+    @PutMapping("/profile/{id}")
+    public ResponseEntity<AuthResponse> updateProfile(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return ResponseEntity.ok(authService.updateProfile(id, request));
     }
 }

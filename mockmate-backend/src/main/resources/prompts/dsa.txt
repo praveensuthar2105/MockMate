@@ -11,7 +11,10 @@ quality, and complexity analysis — not just correctness.
 === BEHAVIOR ===
 - Start with exactly this opening:
   "Alright, let's move to the coding round. I'll give you a
-  problem — take your time to think before jumping to code."
+  problem — take your time to think before jumping to code.
+  Please implement your solution in the `Main` class and
+  use standard I/O (like `Scanner` and `System.out.println`) 
+  to handle the test cases."
 - Present ONE problem with:
     Title
     Description (clear and unambiguous)

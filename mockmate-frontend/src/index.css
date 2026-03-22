@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-page: #F7F6F3;
+    --bg-surface: #FFFFFF;
+    --bg-subtle: #F0EFE9;
+    --bg-overlay: #ECEAE3;
+
+    --border: #E2E0D8;
+    --border-strong: #C8C6BC;
+    --border-focus: #6C63FF;
+
+    --violet: #6C63FF;
+    --violet-light: #EEF0FF;
+    --violet-dark: #5247D4;
+
+    --success: #16A34A;
+    --success-light: #DCFCE7;
+    --warning: #D97706;
+    --warning-light: #FEF3C7;
+    --danger: #DC2626;
+    --danger-light: #FEE2E2;
+    --info: #2563EB;
+    --info-light: #DBEAFE;
+
+    --text-primary: #1A1A24;
+    --text-secondary: #6B6B80;
+    --text-tertiary: #9B9BAA;
+
+    --phase-resume: #6C63FF;
+    --phase-resume-bg: #EEF0FF;
+
+    --phase-dsa: #059669;
+    --phase-dsa-bg: #D1FAE5;
+
+    --phase-system-design: #D97706;
+    --phase-system-design-bg: #FEF3C7;
+
+    --phase-hr: #DB2777;
+    --phase-hr-bg: #FCE7F3;
+  }
+
+  body {
+    @apply bg-bg-page text-text-primary font-body antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+}

@@ -6,13 +6,18 @@ import com.mockmate.model.*;
 import com.mockmate.repository.InterviewSessionRepository;
 import com.mockmate.repository.PhaseResultRepository;
 import com.mockmate.repository.UserRepository;
+import com.mockmate.repository.ChatMessageRepository;
+import com.mockmate.dto.response.ChatMessageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -25,25 +30,68 @@ public class InterviewService {
     private final PhaseTimerService phaseTimerService;
     private final PhaseQuestionService phaseQuestionService;
     private final ChatService chatService;
+    private final ChatMessageRepository chatMessageRepository;
 
     @Transactional
-    public InterviewResponse startSession(Long userId, InterviewRequest request) {
+    public InterviewResponse createSession(Long userId, InterviewRequest request) {
+        Objects.requireNonNull(userId, "userId must not be null");
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getId() == null) {
+            throw new RuntimeException("User ID is null");
+        }
 
         InterviewSession session = new InterviewSession();
         session.setUser(user);
         session.setCompany(request.getCompany());
+        session.setJobRole(request.getJobRole());
         session.setDifficulty(Difficulty.valueOf(request.getDifficulty().toUpperCase()));
+        session.setInterviewType(request.getType() != null ? request.getType() : InterviewType.FULL_MOCK);
         session.setStatus(SessionStatus.IN_PROGRESS);
-        session.setCurrentPhase(PhaseType.RESUME_SCREEN);
-        session.setStartedAt(LocalDateTime.now());
-        session.setPhaseEndTime(LocalDateTime.now().plusMinutes(session.getResumeDurationMins()));
+
+        PhaseType initialPhase = switch (session.getInterviewType()) {
+            case DSA_ONLY -> PhaseType.DSA;
+            case SYSTEM_DESIGN_ONLY -> PhaseType.SYSTEM_DESIGN;
+            case HR_ONLY -> PhaseType.HR;
+            default -> PhaseType.RESUME_SCREEN;
+        };
+        session.setCurrentPhase(initialPhase);
+
+        if (request.getResumeDurationMins() != null)
+            session.setResumeDurationMins(request.getResumeDurationMins());
+        if (request.getDsaDurationMins() != null)
+            session.setDsaDurationMins(request.getDsaDurationMins());
+        if (request.getSystemDesignDurationMins() != null)
+            session.setSystemDesignDurationMins(request.getSystemDesignDurationMins());
+        if (request.getHrDurationMins() != null)
+            session.setHrDurationMins(request.getHrDurationMins());
 
         InterviewSession saved = sessionRepository.save(session);
-        log.info("Interview session started: id={}, user={}, company={}", saved.getId(), userId, request.getCompany());
+        log.info("Interview session created: id={}, user={}, company={}", saved.getId(), userId, request.getCompany());
 
-        // Generate opening question for the first phase (RESUME_SCREEN)
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    public InterviewResponse startSession(Long sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Interview session not found"));
+
+        session.setStartedAt(LocalDateTime.now());
+
+        int duration = switch (session.getCurrentPhase()) {
+            case RESUME_SCREEN -> session.getResumeDurationMins();
+            case DSA -> session.getDsaDurationMins();
+            case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
+            case HR -> session.getHrDurationMins();
+        };
+        session.setPhaseEndTime(LocalDateTime.now().plusMinutes(duration));
+
+        InterviewSession saved = sessionRepository.save(session);
+        log.info("Interview session started: id={}", saved.getId());
+
         String firstQuestion = phaseQuestionService.generateFirstQuestion(saved);
         chatService.saveAiMessage(saved, firstQuestion);
 
@@ -51,19 +99,28 @@ public class InterviewService {
     }
 
     public InterviewResponse getSession(Long sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
         return mapToResponse(session);
     }
 
     public List<InterviewResponse> getUserSessions(Long userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
         return sessionRepository.findByUserId(userId).stream()
                 .map(this::mapToResponse)
                 .toList();
     }
 
+    public Page<InterviewResponse> getUserSessionsPaginated(Long userId, Pageable pageable) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        return sessionRepository.findByUserIdOrderByStartedAtDesc(userId, pageable)
+                .map(this::mapToResponse);
+    }
+
     @Transactional
     public PhaseType advancePhase(Long sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
@@ -77,10 +134,10 @@ public class InterviewService {
 
     @Transactional
     public InterviewResponse endSession(Long sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId must not be null");
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
-        // Save final phase result
         PhaseResult result = new PhaseResult();
         result.setSession(session);
         result.setPhaseType(session.getCurrentPhase());
@@ -96,25 +153,32 @@ public class InterviewService {
         return mapToResponse(saved);
     }
 
-    private int getDurationForPhase(InterviewSession session, PhaseType phase) {
-        return switch (phase) {
-            case RESUME_SCREEN -> session.getResumeDurationMins();
-            case DSA -> session.getDsaDurationMins();
-            case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
-            case HR -> session.getHrDurationMins();
-        };
-    }
-
     private InterviewResponse mapToResponse(InterviewSession session) {
         return InterviewResponse.builder()
                 .id(session.getId())
                 .company(session.getCompany())
+                .jobRole(session.getJobRole())
                 .difficulty(session.getDifficulty() != null ? session.getDifficulty().name() : null)
+                .interviewType(session.getInterviewType())
                 .status(session.getStatus())
                 .currentPhase(session.getCurrentPhase())
                 .phaseEndTime(session.getPhaseEndTime())
                 .startedAt(session.getStartedAt())
+                .endedAt(session.getEndedAt())
                 .totalScore(session.getTotalScore())
+                .resumeDurationMins(session.getResumeDurationMins())
+                .dsaDurationMins(session.getDsaDurationMins())
+                .systemDesignDurationMins(session.getSystemDesignDurationMins())
+                .hrDurationMins(session.getHrDurationMins())
+                .messages(chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId()).stream()
+                        .map(msg -> ChatMessageResponse.builder()
+                                .id(msg.getId())
+                                .role(msg.getRole())
+                                .content(msg.getContent())
+                                .timestamp(msg.getCreatedAt())
+                                .phase(msg.getPhaseType())
+                                .build())
+                        .toList())
                 .build();
     }
 }

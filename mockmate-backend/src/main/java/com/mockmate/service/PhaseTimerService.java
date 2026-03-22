@@ -26,6 +26,7 @@ public class PhaseTimerService {
     private final PhaseQuestionService phaseQuestionService;
     private final ChatService chatService;
     private final com.mockmate.repository.PhaseResultRepository phaseResultRepository;
+    private final DsaProblemService dsaProblemService;
 
     @Scheduled(fixedRate = 1000)
     @Transactional
@@ -54,7 +55,7 @@ public class PhaseTimerService {
 
     @Transactional
     public void advancePhaseOrComplete(InterviewSession session) {
-        PhaseType next = getNextPhase(session.getCurrentPhase());
+        PhaseType next = getNextPhase(session);
 
         if (next == null) {
             // Save result for current phase
@@ -86,6 +87,11 @@ public class PhaseTimerService {
             session.setPhaseEndTime(LocalDateTime.now().plusMinutes(duration));
             sessionRepository.save(session);
 
+            // If next phase is DSA, generate and persist problem first so AI can use it
+            if (next == PhaseType.DSA) {
+                dsaProblemService.generateProblem(session);
+            }
+
             // Generate opening question for new phase
             String firstQuestion = phaseQuestionService.generateFirstQuestion(session);
 
@@ -102,7 +108,18 @@ public class PhaseTimerService {
         }
     }
 
-    private PhaseType getNextPhase(PhaseType current) {
+    private PhaseType getNextPhase(InterviewSession session) {
+        PhaseType current = session.getCurrentPhase();
+
+        // Handle specialized interview completion
+        if (session.getInterviewType() == com.mockmate.model.InterviewType.DSA_ONLY && current == PhaseType.DSA)
+            return null;
+        if (session.getInterviewType() == com.mockmate.model.InterviewType.SYSTEM_DESIGN_ONLY
+                && current == PhaseType.SYSTEM_DESIGN)
+            return null;
+        if (session.getInterviewType() == com.mockmate.model.InterviewType.HR_ONLY && current == PhaseType.HR)
+            return null;
+
         return switch (current) {
             case RESUME_SCREEN -> PhaseType.DSA;
             case DSA -> PhaseType.SYSTEM_DESIGN;

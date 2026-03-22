@@ -1,5 +1,8 @@
 package com.mockmate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockmate.dto.code.DsaProblem;
+
 import com.mockmate.model.InterviewSession;
 import com.mockmate.model.PhaseType;
 import com.mockmate.model.Resume;
@@ -25,6 +28,7 @@ public class PhaseQuestionService {
 
     private final ChatLanguageModel chatLanguageModel;
     private final ResumeRepository resumeRepository;
+    private final ObjectMapper objectMapper;
 
     private String baseContextTemplate;
     private String resumeScreenTemplate;
@@ -71,8 +75,18 @@ public class PhaseQuestionService {
     }
 
     private String generateDsaOpener(InterviewSession session) {
+        String problemInfo = "a general coding problem";
+        if (session.getReportJson() != null && !session.getReportJson().isEmpty()) {
+            try {
+                DsaProblem problem = objectMapper.readValue(session.getReportJson(), DsaProblem.class);
+                problemInfo = "the following problem: '" + problem.getTitle() + "'\nDescription: "
+                        + problem.getDescription();
+            } catch (Exception e) {
+                log.warn("Failed to parse DsaProblem for opener", e);
+            }
+        }
         String systemPrompt = buildSystemPrompt(session, dsaTemplate);
-        return callGemini(systemPrompt, "Please generate the opening DSA problem for this interview.");
+        return callGemini(systemPrompt, "Please introduce this coding round and present " + problemInfo);
     }
 
     private String generateSystemDesignOpener(InterviewSession session) {

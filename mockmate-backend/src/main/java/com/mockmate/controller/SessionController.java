@@ -2,7 +2,6 @@ package com.mockmate.controller;
 
 import com.mockmate.dto.request.InterviewRequest;
 import com.mockmate.dto.response.InterviewResponse;
-import com.mockmate.model.PhaseType;
 import com.mockmate.model.User;
 import com.mockmate.repository.UserRepository;
 import com.mockmate.service.InterviewService;
@@ -12,34 +11,55 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
-@RequestMapping("/api/interviews")
+@RequestMapping("/api/sessions")
 @RequiredArgsConstructor
-public class InterviewController {
+public class SessionController {
 
     private final InterviewService interviewService;
     private final UserRepository userRepository;
 
-    @PostMapping("/start")
-    public ResponseEntity<InterviewResponse> startInterview(
+    @GetMapping("")
+    public ResponseEntity<Page<InterviewResponse>> getSessions(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return ResponseEntity.ok(interviewService.getUserSessionsPaginated(user.getId(), PageRequest.of(page, size)));
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<InterviewResponse> createSession(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody InterviewRequest request) {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        return ResponseEntity.ok(interviewService.startSession(user.getId(), request));
+        return ResponseEntity.ok(interviewService.createSession(user.getId(), request));
+    }
+
+    @PostMapping("/{id}/start")
+    public ResponseEntity<InterviewResponse> startSession(@PathVariable Long id) {
+        return ResponseEntity.ok(interviewService.startSession(id));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<InterviewResponse> getInterview(@PathVariable Long id) {
+    public ResponseEntity<InterviewResponse> getSession(@PathVariable Long id) {
+        return ResponseEntity.ok(interviewService.getSession(id));
+    }
+
+    @GetMapping("/{id}/report")
+    public ResponseEntity<InterviewResponse> getReport(@PathVariable Long id) {
         return ResponseEntity.ok(interviewService.getSession(id));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<List<InterviewResponse>> getMyInterviews(
+    public ResponseEntity<List<InterviewResponse>> getMySessions(
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -53,7 +73,7 @@ public class InterviewController {
     }
 
     @PostMapping("/{id}/end")
-    public ResponseEntity<InterviewResponse> endInterview(@PathVariable Long id) {
+    public ResponseEntity<InterviewResponse> endSession(@PathVariable Long id) {
         return ResponseEntity.ok(interviewService.endSession(id));
     }
 }

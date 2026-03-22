@@ -62,9 +62,12 @@ public class InterviewWebSocketController {
             ChatResponse aiResponse = chatService.processMessage(sessionId, request.getContent());
 
             // Step 5: Broadcast AI response
-            simpMessagingTemplate.convertAndSend(
-                    "/topic/session/" + sessionId,
-                    WsEvent.message(aiResponse.getContent()));
+            WsEvent aiEvent = WsEvent.message(aiResponse.getContent());
+            if (aiEvent != null) {
+                simpMessagingTemplate.convertAndSend(
+                        "/topic/session/" + sessionId,
+                        (Object) aiEvent);
+            }
 
             // Step 6: Check if phase should end
             // (e.g. max questions or follow-up count reached).
@@ -75,10 +78,14 @@ public class InterviewWebSocketController {
                 followUpLimitReached = true;
             }
 
-            if (followUpLimitReached) {
-                // If the AI naturally concluded the phase, we could auto-advance here
-                // simpMessagingTemplate.convertAndSend("/topic/session/" + sessionId,
-                // WsEvent.phaseChange(session.getCurrentPhase()));
+            if (followUpLimitReached || request.getContent().toLowerCase().contains("next round")) {
+                PhaseType nextPhase = interviewService.advancePhase(sessionId);
+                WsEvent phaseEvent = WsEvent.phaseChange(nextPhase);
+                if (phaseEvent != null) {
+                    simpMessagingTemplate.convertAndSend("/topic/session/" + sessionId,
+                            (Object) phaseEvent);
+                }
+                log.info("Phase auto-advanced to {} for session {}", nextPhase, sessionId);
             }
 
         } catch (Exception e) {

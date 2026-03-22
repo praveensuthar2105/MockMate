@@ -45,7 +45,17 @@ public class CodeSubmission {
 
     private Integer score;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evaluation_json", columnDefinition = "jsonb")
+    private String evaluationJson;
+
+    @Column(columnDefinition = "boolean default false")
+    private Boolean submitted = false;
+
     @CreationTimestamp
     @Column(name = "submitted_at", updatable = false)
     private LocalDateTime submittedAt;
+
+    @Version
+    private Integer version;
 }

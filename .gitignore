@@ -1,0 +1,25 @@
+### Env files ###
+.env
+.env.local
+.env.*.local
+
+### IDEs ###
+.vscode/
+.idea/
+*.iws
+*.iml
+*.ipr
+
+### Build outputs ###
+target/
+build/
+node_modules/
+dist/
+out/
+
+### OS files ###
+.DS_Store
+Thumbs.db
+
+### Local uploads ###
+uploads/

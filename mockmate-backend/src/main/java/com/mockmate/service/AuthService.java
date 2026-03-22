@@ -3,6 +3,7 @@ package com.mockmate.service;
 import com.mockmate.dto.request.LoginRequest;
 import com.mockmate.dto.request.RegisterRequest;
 import com.mockmate.dto.request.RefreshTokenRequest;
+import com.mockmate.dto.request.UpdateProfileRequest;
 import com.mockmate.dto.response.AuthResponse;
 import com.mockmate.model.User;
 import com.mockmate.repository.UserRepository;
@@ -34,6 +35,11 @@ public class AuthService {
         user.setName(request.name());
         user.setEmail(request.email());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        if (request.experienceLevel() != null) {
+            user.setExperienceLevel(request.experienceLevel());
+        } else {
+            user.setExperienceLevel(com.mockmate.model.ExperienceLevel.FRESHER);
+        }
 
         var savedUser = userRepository.save(user);
 
@@ -42,11 +48,14 @@ public class AuthService {
         var refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
-                .token(jwtToken)
+                .accessToken(jwtToken)
                 .refreshToken(refreshToken)
-                .id(savedUser.getId())
+                .userId(savedUser.getId())
                 .name(savedUser.getName())
                 .email(savedUser.getEmail())
+                .experienceLevel(
+                        savedUser.getExperienceLevel() != null ? savedUser.getExperienceLevel().name() : "FRESHER")
+                .profileComplete(savedUser.getProfileComplete() != null ? savedUser.getProfileComplete() : false)
                 .build();
     }
 
@@ -64,11 +73,13 @@ public class AuthService {
         var refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
-                .token(jwtToken)
+                .accessToken(jwtToken)
                 .refreshToken(refreshToken)
-                .id(user.getId())
+                .userId(user.getId())
                 .name(user.getName())
                 .email(user.getEmail())
+                .experienceLevel(user.getExperienceLevel() != null ? user.getExperienceLevel().name() : "FRESHER")
+                .profileComplete(user.getProfileComplete() != null ? user.getProfileComplete() : false)
                 .build();
     }
 
@@ -85,14 +96,43 @@ public class AuthService {
                         .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
                 return AuthResponse.builder()
-                        .token(newToken)
+                        .accessToken(newToken)
                         .refreshToken(token) // Assuming we keep the old refresh token, or generate a new one
-                        .id(user.getId())
+                        .userId(user.getId())
                         .name(user.getName())
                         .email(user.getEmail())
+                        .experienceLevel(
+                                user.getExperienceLevel() != null ? user.getExperienceLevel().name() : "FRESHER")
+                        .profileComplete(user.getProfileComplete() != null ? user.getProfileComplete() : false)
                         .build();
             }
         }
         throw new IllegalArgumentException("Invalid refresh token");
+    }
+
+    public AuthResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        user.setName(request.name());
+        user.setExperienceLevel(request.experienceLevel());
+        user.setProfileComplete(true);
+
+        var updatedUser = userRepository.save(user);
+
+        UserDetails userDetails = userDetailsService.loadUserByUsername(updatedUser.getEmail());
+        var jwtToken = jwtService.generateToken(userDetails);
+        var refreshToken = jwtService.generateRefreshToken(userDetails);
+
+        return AuthResponse.builder()
+                .accessToken(jwtToken)
+                .refreshToken(refreshToken)
+                .userId(updatedUser.getId())
+                .name(updatedUser.getName())
+                .email(updatedUser.getEmail())
+                .experienceLevel(
+                        updatedUser.getExperienceLevel() != null ? updatedUser.getExperienceLevel().name() : "FRESHER")
+                .profileComplete(updatedUser.getProfileComplete() != null ? updatedUser.getProfileComplete() : false)
+                .build();
     }
 }

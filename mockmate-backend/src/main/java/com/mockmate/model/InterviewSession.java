@@ -16,6 +16,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class InterviewSession {
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "interview_type")
+    private InterviewType interviewType = InterviewType.FULL_MOCK;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -25,6 +29,10 @@ public class InterviewSession {
     private User user;
 
     private String company;
+
+    @Column(name = "job_role")
+    private String jobRole;
+
     @Convert(converter = com.mockmate.model.converter.DifficultyConverter.class)
     private Difficulty difficulty;
 

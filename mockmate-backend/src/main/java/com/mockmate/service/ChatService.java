@@ -1,5 +1,7 @@
 package com.mockmate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockmate.dto.code.DsaProblem;
 import com.mockmate.dto.response.ChatResponse;
 import com.mockmate.model.*;
 import com.mockmate.repository.ChatMessageRepository;
@@ -32,6 +34,7 @@ public class ChatService {
         private final ChatMessageRepository chatMessageRepository;
         private final InterviewSessionRepository sessionRepository;
         private final ResumeRepository resumeRepository;
+        private final ObjectMapper objectMapper;
 
         private String baseContextTemplate;
         private String resumeScreenTemplate;
@@ -140,8 +143,13 @@ public class ChatService {
                 ChatRequest chatRequest = ChatRequest.builder()
                                 .messages(messages)
                                 .build();
-                var response = chatLanguageModel.chat(chatRequest);
-                return response.aiMessage().text();
+                try {
+                        var response = chatLanguageModel.chat(chatRequest);
+                        return response.aiMessage().text();
+                } catch (Exception e) {
+                        log.error("AI chat failed: {}", e.getMessage());
+                        return " [MOCK MODE] I'm sorry, I'm having trouble connecting to my brain right now (AI API Error). Let's continue the interview assuming you gave a great answer! Can you elaborate more on that or should we move to the next question?";
+                }
         }
 
         private String buildSystemPrompt(InterviewSession session) {
@@ -167,9 +175,25 @@ public class ChatService {
                                         "company", company,
                                         "difficulty", difficulty,
                                         "resumeJson", resumeJson));
-                        case DSA -> replacePlaceholders(dsaTemplate, Map.of(
-                                        "company", company,
-                                        "difficulty", difficulty));
+                        case DSA -> {
+                                String problemInfo = "";
+                                if (session.getReportJson() != null && !session.getReportJson().isEmpty()) {
+                                        try {
+                                                DsaProblem problem = objectMapper.readValue(session.getReportJson(),
+                                                                DsaProblem.class);
+                                                problemInfo = "\n=== CURRENT PROBLEM ===\nYou are conducting an interview for this specific problem:\n"
+                                                                + "Title: " + problem.getTitle() + "\n"
+                                                                + "Description: " + problem.getDescription() + "\n"
+                                                                + "Constraints: "
+                                                                + String.join(", ", problem.getConstraints());
+                                        } catch (Exception e) {
+                                                log.warn("Failed to parse DsaProblem for chat context", e);
+                                        }
+                                }
+                                yield replacePlaceholders(dsaTemplate, Map.of(
+                                                "company", company,
+                                                "difficulty", difficulty)) + problemInfo;
+                        }
                         case SYSTEM_DESIGN -> replacePlaceholders(systemDesignTemplate, Map.of(
                                         "company", company,
                                         "difficulty", difficulty));

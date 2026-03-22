@@ -12,5 +12,7 @@ import java.util.Optional;
 public interface PhaseResultRepository extends JpaRepository<PhaseResult, Long> {
     List<PhaseResult> findBySessionId(Long sessionId);
 
+    List<PhaseResult> findBySessionIdIn(List<Long> sessionIds);
+
     Optional<PhaseResult> findBySessionIdAndPhaseType(Long sessionId, PhaseType phaseType);
 }
