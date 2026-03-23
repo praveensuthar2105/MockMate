@@ -57,6 +57,11 @@ public class CodeController {
         candidateView.setExamples(problem.getExamples());
         candidateView.setDifficulty(problem.getDifficulty());
 
+        // Expose only starter codes to frontend, never test runners
+        candidateView.setJavaStarterCode(problem.getJavaStarterCode());
+        candidateView.setPythonStarterCode(problem.getPythonStarterCode());
+        candidateView.setJavascriptStarterCode(problem.getJavascriptStarterCode());
+
         response.setProblem(candidateView);
 
         List<CodeSubmission> submissions = codeSubmissionRepository.findBySessionIdOrderBySubmittedAtDesc(sessionId);
@@ -99,8 +104,44 @@ public class CodeController {
             visibleTests.add(0, customTc);
         }
 
-        ExecutionResult result = codeExecutionService.execute(request.getLanguage(), request.getCode(), visibleTests);
+        String testRunner = getTestRunner(request.getLanguage(), problem);
+        ExecutionResult result = codeExecutionService.execute(request.getLanguage(), request.getCode(), visibleTests,
+                testRunner);
+
+        // Persist as draft submission so AI interviewer has context
+        persistDraftSubmission(session, request.getLanguage(), request.getCode(), result);
+
         return ResponseEntity.ok(result);
+    }
+
+    private void persistDraftSubmission(InterviewSession session, String language, String code,
+            ExecutionResult result) {
+        try {
+            List<CodeSubmission> submissions = codeSubmissionRepository
+                    .findBySessionIdOrderBySubmittedAtDesc(session.getId());
+
+            CodeSubmission submission;
+            if (!submissions.isEmpty()
+                    && (submissions.get(0).getSubmitted() == null || !submissions.get(0).getSubmitted())) {
+                submission = submissions.get(0);
+            } else {
+                submission = new CodeSubmission();
+                submission.setSession(session);
+                submission.setHintsUsed(0);
+            }
+
+            submission.setLanguage(language);
+            submission.setCode(code);
+            submission.setSubmitted(false);
+            submission.setSubmittedAt(java.time.LocalDateTime.now());
+
+            ObjectMapper mapper = new ObjectMapper();
+            submission.setTestResultsJson(mapper.writeValueAsString(result));
+
+            codeSubmissionRepository.save(submission);
+        } catch (Exception e) {
+            log.error("Failed to persist draft submission", e);
+        }
     }
 
     @PostMapping("/submit")
@@ -121,8 +162,9 @@ public class CodeController {
         }
 
         DsaProblem problem = dsaProblemService.generateProblem(session);
+        String testRunner = getTestRunner(request.getLanguage().name(), problem);
         ExecutionResult executionResult = codeExecutionService.execute(request.getLanguage().name(), request.getCode(),
-                problem.getTestCases());
+                problem.getTestCases(), testRunner);
 
         CodeEvaluation evaluation = codeEvaluationService.evaluate(request.getCode(), request.getLanguage().name(),
                 problem,
@@ -151,6 +193,16 @@ public class CodeController {
         if (submissions.isEmpty())
             return 0;
         return submissions.get(0).getHintsUsed() != null ? submissions.get(0).getHintsUsed() : 0;
+    }
+
+    private String getTestRunner(String language, DsaProblem problem) {
+        if ("JAVA".equalsIgnoreCase(language))
+            return problem.getJavaTestRunner();
+        if ("PYTHON".equalsIgnoreCase(language))
+            return problem.getPythonTestRunner();
+        if ("JAVASCRIPT".equalsIgnoreCase(language))
+            return problem.getJavascriptTestRunner();
+        return null;
     }
 
     private InterviewSession validateSessionOwnershipAndPhase(Long sessionId, String email) {

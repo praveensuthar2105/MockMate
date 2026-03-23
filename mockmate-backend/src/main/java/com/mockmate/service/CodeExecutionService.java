@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class CodeExecutionService {
 
-    public ExecutionResult execute(String language, String code, List<TestCase> testCases) {
+    public ExecutionResult execute(String language, String code, List<TestCase> testCases, String testRunner) {
         ExecutionResult result = new ExecutionResult();
         result.setCompiled(true);
         result.setResults(new ArrayList<>());
@@ -32,8 +32,15 @@ public class CodeExecutionService {
             tempDir = Files.createTempDirectory("mockmate-exec-");
 
             if ("JAVA".equalsIgnoreCase(language)) {
-                Path sourceFile = tempDir.resolve("Main.java");
-                Files.writeString(sourceFile, code);
+                if (testRunner != null && !testRunner.isEmpty()) {
+                    Path solutionFile = tempDir.resolve("Solution.java");
+                    Files.writeString(solutionFile, code);
+                    Path mainFile = tempDir.resolve("Main.java");
+                    Files.writeString(mainFile, testRunner);
+                } else {
+                    Path sourceFile = tempDir.resolve("Main.java");
+                    Files.writeString(sourceFile, code);
+                }
 
                 String javaHome = System.getProperty("java.home");
                 String os = System.getProperty("os.name").toLowerCase();
@@ -70,8 +77,12 @@ public class CodeExecutionService {
                     return result;
                 }
             } else if ("PYTHON".equalsIgnoreCase(language)) {
+                String finalCode = code;
+                if (testRunner != null && !testRunner.isEmpty()) {
+                    finalCode = code + "\n\n" + testRunner;
+                }
                 Path sourceFile = tempDir.resolve("solution.py");
-                Files.writeString(sourceFile, code);
+                Files.writeString(sourceFile, finalCode);
             } else {
                 result.setCompiled(false);
                 result.setCompileError("Unsupported language: " + language);

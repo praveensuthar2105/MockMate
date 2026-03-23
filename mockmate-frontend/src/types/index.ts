@@ -80,6 +80,12 @@ export interface DsaProblem {
     difficulty: Difficulty
     timeComplexityExpected: string
     spaceComplexityExpected: string
+    javaStarterCode?: string
+    javaTestRunner?: string
+    pythonStarterCode?: string
+    pythonTestRunner?: string
+    javascriptStarterCode?: string
+    javascriptTestRunner?: string
 }
 
 export interface ProblemExample {

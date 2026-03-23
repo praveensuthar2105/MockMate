@@ -66,7 +66,7 @@ public class InterviewWebSocketController {
             if (aiEvent != null) {
                 simpMessagingTemplate.convertAndSend(
                         "/topic/session/" + sessionId,
-                        (Object) aiEvent);
+                        aiEvent);
             }
 
             // Step 6: Check if phase should end
@@ -83,7 +83,7 @@ public class InterviewWebSocketController {
                 WsEvent phaseEvent = WsEvent.phaseChange(nextPhase);
                 if (phaseEvent != null) {
                     simpMessagingTemplate.convertAndSend("/topic/session/" + sessionId,
-                            (Object) phaseEvent);
+                            phaseEvent);
                 }
                 log.info("Phase auto-advanced to {} for session {}", nextPhase, sessionId);
             }

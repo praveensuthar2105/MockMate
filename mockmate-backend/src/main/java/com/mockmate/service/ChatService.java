@@ -5,6 +5,7 @@ import com.mockmate.dto.code.DsaProblem;
 import com.mockmate.dto.response.ChatResponse;
 import com.mockmate.model.*;
 import com.mockmate.repository.ChatMessageRepository;
+import com.mockmate.repository.CodeSubmissionRepository;
 import com.mockmate.repository.InterviewSessionRepository;
 import com.mockmate.repository.ResumeRepository;
 import dev.langchain4j.data.message.AiMessage;
@@ -24,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +36,7 @@ public class ChatService {
         private final ChatMessageRepository chatMessageRepository;
         private final InterviewSessionRepository sessionRepository;
         private final ResumeRepository resumeRepository;
+        private final CodeSubmissionRepository codeSubmissionRepository;
         private final ObjectMapper objectMapper;
 
         private String baseContextTemplate;
@@ -54,7 +57,9 @@ public class ChatService {
 
         private String loadTemplate(String path) {
                 try {
-                        return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
+                        String content = new ClassPathResource(path)
+                                        .getContentAsString(Objects.requireNonNull(StandardCharsets.UTF_8));
+                        return Objects.requireNonNull(content, "Template content must not be null");
                 } catch (IOException e) {
                         log.error("Failed to load prompt template: {}", path, e);
                         throw new RuntimeException("Failed to load prompt template: " + path, e);
@@ -63,6 +68,7 @@ public class ChatService {
 
         @Transactional
         public ChatResponse processMessage(Long sessionId, String userMessage) {
+                Objects.requireNonNull(sessionId, "sessionId must not be null");
                 InterviewSession session = sessionRepository.findById(sessionId)
                                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
@@ -192,7 +198,8 @@ public class ChatService {
                                 }
                                 yield replacePlaceholders(dsaTemplate, Map.of(
                                                 "company", company,
-                                                "difficulty", difficulty)) + problemInfo;
+                                                "difficulty", difficulty)) + problemInfo
+                                                + buildSubmissionContext(session);
                         }
                         case SYSTEM_DESIGN -> replacePlaceholders(systemDesignTemplate, Map.of(
                                         "company", company,
@@ -204,6 +211,42 @@ public class ChatService {
                 };
 
                 return baseContext + "\n" + phasePrompt;
+        }
+
+        private String buildSubmissionContext(InterviewSession session) {
+                List<CodeSubmission> submissions = codeSubmissionRepository
+                                .findBySessionIdOrderBySubmittedAtDesc(session.getId());
+
+                if (submissions.isEmpty()) {
+                        return "\n=== SUBMISSION STATUS ===\nUser has NOT submitted any code yet.";
+                }
+
+                CodeSubmission latest = submissions.get(0);
+                boolean isSubmitted = latest.getSubmitted() != null && latest.getSubmitted();
+
+                StringBuilder context = new StringBuilder("\n=== LATEST CODE ACTIVITY ===\n");
+                context.append("State: ").append(isSubmitted ? "OFFICIALLY SUBMITTED" : "RUNNING/TESTING (Draft)")
+                                .append("\n");
+                context.append("Language: ").append(latest.getLanguage()).append("\n");
+                context.append("Current Code:\n```").append(latest.getLanguage()).append("\n").append(latest.getCode())
+                                .append("\n```\n");
+
+                if (latest.getTestResultsJson() != null) {
+                        context.append("Latest Execution/Test Results: ").append(latest.getTestResultsJson())
+                                        .append("\n");
+                }
+
+                if (isSubmitted && latest.getEvaluationJson() != null) {
+                        context.append("AI Scoring/Evaluation: ").append(latest.getEvaluationJson()).append("\n");
+                }
+
+                if (!isSubmitted) {
+                        context.append("\nINSTRUCTION: The user is still working on the code. If their latest run failed tests, you can offer gentle hints or ask about their approach. If it passed, encourage them to submit.");
+                } else {
+                        context.append("\nINSTRUCTION: The user HAS submitted. Acknowledge the submission and discuss the results/complexity. Do NOT ask them for the code again.");
+                }
+
+                return context.toString();
         }
 
         private String replacePlaceholders(String template, Map<String, String> variables) {

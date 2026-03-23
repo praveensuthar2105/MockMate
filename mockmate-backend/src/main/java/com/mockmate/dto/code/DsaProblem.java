@@ -15,4 +15,12 @@ public class DsaProblem {
     private String difficulty;
     private String timeComplexityExpected;
     private String spaceComplexityExpected;
+
+    // LeetCode-style templates
+    private String javaStarterCode;
+    private String javaTestRunner;
+    private String pythonStarterCode;
+    private String pythonTestRunner;
+    private String javascriptStarterCode;
+    private String javascriptTestRunner;
 }

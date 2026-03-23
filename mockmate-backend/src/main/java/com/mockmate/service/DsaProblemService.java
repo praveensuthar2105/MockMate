@@ -49,16 +49,24 @@ public class DsaProblemService {
                 "  \"examples\": [{ \"input\": \"string\", \"output\": \"string\", \"explanation\": \"string\" }],\n" +
                 "  \"testCases\": [{ \"input\": \"string\", \"expectedOutput\": \"string\" }],\n" +
                 "  \"hints\": [\n" +
-                "    { \"level\": 1, \"hint\": \"approach direction only\" },\n" +
-                "    { \"level\": 2, \"hint\": \"data structure suggestion only\" },\n" +
-                "    { \"level\": 3, \"hint\": \"pseudocode outline only\" }\n" +
+                "    { \"level\": 1, \"hint\": \"...\" },\n" +
+                "    { \"level\": 2, \"hint\": \"...\" },\n" +
+                "    { \"level\": 3, \"hint\": \"...\" }\n" +
                 "  ],\n" +
                 "  \"difficulty\": \"string\",\n" +
                 "  \"timeComplexityExpected\": \"string\",\n" +
-                "  \"spaceComplexityExpected\": \"string\"\n" +
+                "  \"spaceComplexityExpected\": \"string\",\n" +
+                "  \"javaStarterCode\": \"class Solution { ... }\",\n" +
+                "  \"javaTestRunner\": \"public class Main { ... reads stdin, calls Solution, prints output ... }\",\n"
+                +
+                "  \"pythonStarterCode\": \"class Solution: ...\",\n" +
+                "  \"pythonTestRunner\": \"if __name__ == '__main__': ... reads sys.stdin, calls Solution ...\",\n" +
+                "  \"javascriptStarterCode\": \"class Solution { ... }\",\n" +
+                "  \"javascriptTestRunner\": \"const Solution = require('./solution'); ... reads stdin ...\"\n" +
                 "}\n" +
-                "Generate at least 5 test cases (2 visible examples + 3 hidden).\n" +
-                "Easy: arrays/strings. Medium: trees/graphs/DP. Hard: advanced DP/graphs.";
+                "IMPORTANT: The TestRunner must be a complete Main class that reads from stdin, calls the Solution class/method, and prints the result to stdout. For Java, Main.java will have Solution.java available.\n"
+                +
+                "Generate at least 5 test cases.";
 
         DsaProblem problem = null;
 
@@ -161,6 +169,13 @@ public class DsaProblemService {
                             "pine apple pen apple\npineapple pen apple\npine applepen apple"),
                     createTestCase("catsandog\ncats,dog,sand,and,cat", "")));
             problem.setExamples(toExamples(problem.getTestCases()));
+
+            problem.setJavaStarterCode(
+                    "class Solution {\n    public List<String> wordBreak(String s, List<String> wordDict) {\n        \n    }\n}");
+            problem.setJavaTestRunner(
+                    "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String s = sc.nextLine();\n        List<String> dict = Arrays.asList(sc.nextLine().split(\",\"));\n        List<String> res = new Solution().wordBreak(s, dict);\n        Collections.sort(res);\n        for(String str : res) System.out.println(str);\n    }\n}");
+            problem.setPythonStarterCode(
+                    "class Solution:\n    def wordBreak(self, s: str, wordDict: List[str]) -> List[str]:\n        pass");
         } else if ("MEDIUM".equalsIgnoreCase(difficulty)) {
             problem.setTitle("Longest Substring Without Repeating Characters");
             problem.setDescription(
@@ -172,6 +187,13 @@ public class DsaProblemService {
                     createTestCase("bbbbb", "1"),
                     createTestCase("pwwkew", "3")));
             problem.setExamples(toExamples(problem.getTestCases()));
+
+            problem.setJavaStarterCode(
+                    "class Solution {\n    public int lengthOfLongestSubstring(String s) {\n        \n    }\n}");
+            problem.setJavaTestRunner(
+                    "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String s = sc.hasNextLine() ? sc.nextLine() : \"\";\n        System.out.println(new Solution().lengthOfLongestSubstring(s));\n    }\n}");
+            problem.setPythonStarterCode(
+                    "class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        pass");
         } else {
             problem.setTitle("Two Sum");
             problem.setDescription(
@@ -183,6 +205,16 @@ public class DsaProblemService {
                     createTestCase("3 2 4\n6", "[1, 2]"),
                     createTestCase("3 3\n6", "[0, 1]")));
             problem.setExamples(toExamples(problem.getTestCases()));
+
+            // Templates for Two Sum
+            problem.setJavaStarterCode(
+                    "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}");
+            problem.setJavaTestRunner(
+                    "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        int[] nums = Arrays.stream(sc.nextLine().split(\" \")).mapToInt(Integer::parseInt).toArray();\n        int target = Integer.parseInt(sc.nextLine());\n        int[] res = new Solution().twoSum(nums, target);\n        System.out.println(Arrays.toString(res));\n    }\n}");
+            problem.setPythonStarterCode(
+                    "class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass");
+            problem.setPythonTestRunner(
+                    "import sys\nif __name__ == '__main__':\n    nums = list(map(int, sys.stdin.readline().split()))\n    target = int(sys.stdin.readline())\n    print(Solution().twoSum(nums, target))");
         }
 
         return problem;

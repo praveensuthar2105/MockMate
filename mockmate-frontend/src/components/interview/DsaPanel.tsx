@@ -12,7 +12,7 @@ interface DsaPanelProps {
 export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) {
     const [problem, setProblem] = useState<DsaProblem | null>(initialProblem);
     const [language, setLanguage] = useState<string>('java');
-    const [code, setCode] = useState<string>('import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        // Read input using Scanner\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here...\n        \n    }\n}');
+    const [code, setCode] = useState<string>('');
     const [output, setOutput] = useState<ExecutionResult | null>(null);
     const [evaluation, setEvaluation] = useState<CodeEvaluation | null>(null);
     const [isRunning, setIsRunning] = useState(false);
@@ -49,6 +49,15 @@ export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) 
                 try {
                     const data = await codeService.getProblem(sessionId);
                     setProblem(data.problem);
+                    if (data.problem) {
+                        const langKey = `${language}StarterCode` as keyof DsaProblem;
+                        if (data.problem[langKey]) {
+                            setCode(data.problem[langKey] as string);
+                        } else {
+                            // Only set default if code is still empty
+                            setCode(prev => prev || getDefaultCode(language));
+                        }
+                    }
                     if (data.submitted) {
                         setIsSubmitted(true);
                         setEvaluation(data.evaluation);
@@ -64,17 +73,22 @@ export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) 
         }
     }, [sessionId, problem]);
 
+    const getDefaultCode = (lang: string) => {
+        if (lang === 'java') return 'class Solution {\n    // Implement your solution here\n}';
+        if (lang === 'python') return 'class Solution:\n    def solve(self):\n        pass';
+        return '// Start coding here...\n';
+    };
+
     const handleLanguageChange = (newLang: string) => {
         setLanguage(newLang);
-        if (newLang === 'java') {
-            setCode('import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        // Read input using Scanner\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here...\n        \n    }\n}');
-        } else if (newLang === 'python') {
-            setCode('import sys\n\ndef solve():\n    # Read input from sys.stdin\n    # Write your solution here...\n    pass\n\nif __name__ == "__main__":\n    solve()');
-        } else if (newLang === 'javascript') {
-            setCode('const readline = require("readline");\n\nconst rl = readline.createInterface({\n    input: process.stdin,\n    output: process.stdout,\n    terminal: false\n});\n\nrl.on("line", (line) => {\n    // Write your solution here...\n});');
-        } else {
-            setCode('// Start coding here...\n');
+        if (problem) {
+            const langKey = `${newLang}StarterCode` as keyof DsaProblem;
+            if (problem[langKey]) {
+                setCode(problem[langKey] as string);
+                return;
+            }
         }
+        setCode(getDefaultCode(newLang));
     };
 
     const executeCode = async (isSubmit: boolean) => {
@@ -381,16 +395,38 @@ export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) 
                         ) : (
                             <pre className="font-mono text-[13px] text-white/95 whitespace-pre-wrap leading-relaxed animate-in fade-in duration-300">
                                 {output?.compileError || (output?.results?.[0]?.actualOutput ? (
-                                    <div className="space-y-4">
+                                    <div className="space-y-6">
                                         {output.results.map((res, i) => (
-                                            <div key={i} className="pb-4 border-b border-white/5 last:border-0">
-                                                <div className="flex items-center space-x-2 mb-1">
-                                                    <span className="text-[10px] text-text-tertiary">#CASE {i + 1}: </span>
-                                                    <span className={res.passed ? 'text-success' : 'text-danger'}>{res.passed ? 'PASSED' : 'FAILED'}</span>
+                                            <div key={i} className="animate-in slide-in-from-left-2 duration-300">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Test Case {i + 1}</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${res.passed ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'}`}>
+                                                            {res.passed ? 'PASSED' : 'FAILED'}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-[9px] font-mono text-text-tertiary">{res.executionTimeMs}ms</span>
                                                 </div>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    <div><span className="text-text-tertiary opacity-50 text-[10px] mr-2">OUT:</span> <span className="text-white">{res.actualOutput}</span></div>
-                                                    {!res.passed && <div><span className="text-text-tertiary opacity-50 text-[10px] mr-2">EXP:</span> <span className="text-text-tertiary">{res.expectedOutput}</span></div>}
+
+                                                <div className="space-y-3 font-mono text-[12px]">
+                                                    <div className="bg-white/[0.03] border border-white/10 rounded-lg overflow-hidden">
+                                                        <div className="px-3 py-1 bg-white/[0.05] border-b border-white/10 text-[9px] text-text-tertiary uppercase font-bold">Input</div>
+                                                        <div className="p-3 text-white/90 whitespace-pre-wrap break-all">{res.input || '<no-input>'}</div>
+                                                    </div>
+
+                                                    <div className="bg-[#0a0a0a] border border-white/5 rounded-lg overflow-hidden shadow-inner">
+                                                        <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Your Output</div>
+                                                        <div className={`p-3 whitespace-pre-wrap break-all ${res.passed ? 'text-success/80' : 'text-danger/80'}`}>
+                                                            {res.actualOutput || (res.error ? <span className="text-danger italic">Runtime Error: {res.error}</span> : '<no-output>')}
+                                                        </div>
+                                                    </div>
+
+                                                    {!res.passed && !res.error && (
+                                                        <div className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
+                                                            <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Expected Output</div>
+                                                            <div className="p-3 text-text-tertiary whitespace-pre-wrap break-all">{res.expectedOutput}</div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}

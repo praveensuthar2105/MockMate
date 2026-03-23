@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +48,7 @@ public class PhaseQuestionService {
 
     private String loadTemplate(String path) {
         try {
-            return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
+            return new ClassPathResource(path).getContentAsString(Objects.requireNonNull(StandardCharsets.UTF_8));
         } catch (IOException e) {
             log.error("Failed to load prompt template: {}", path, e);
             throw new RuntimeException("Failed to load prompt template: " + path, e);
