@@ -1,26 +1,12 @@
-import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { useProfileStore } from '../store/profileStore';
-import { Mail, Briefcase, Award, Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, Briefcase, Award, CheckCircle, AlertCircle } from 'lucide-react';
 import { LoadingSkeleton } from '../components/shared/LoadingSkeleton';
-import { ErrorState } from '../components/shared/ErrorState';
+import { ResumeUpload } from '../components/resume/ResumeUpload';
+import { ParsedResumePreview } from '../components/resume/ParsedResumePreview';
 
 export default function ProfilePage() {
     const { user } = useAuthStore();
-    const { resume, loading, error, uploadResume, fetchResume } = useProfileStore();
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        fetchResume();
-    }, [fetchResume]);
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            await uploadResume(file);
-        }
-    };
 
     if (!user) return <LoadingSkeleton />;
 
@@ -62,7 +48,7 @@ export default function ProfilePage() {
                                 <div className="space-y-1">
                                     <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider flex items-center space-x-1.5"><Award size={14} /> <span>Profile Status</span></span>
                                     <div className="flex items-center space-x-1.5">
-                                        {resume ? (
+                                        {user?.profileComplete ? (
                                             <>
                                                 <CheckCircle size={14} className="text-success" />
                                                 <p className="text-text-primary font-medium text-success">Complete</p>
@@ -79,69 +65,8 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    {/* Resume Upload Card */}
-                    <div className="bg-bg-surface border border-border rounded-xl shadow-sm p-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="text-lg font-semibold text-text-primary flex items-center space-x-2">
-                                    <FileText size={20} className="text-violet" />
-                                    <span>Resume Management</span>
-                                </h3>
-                                <p className="text-sm text-text-tertiary mt-1">Upload your PDF resume. Our AI uses this to personalize your interview questions.</p>
-                            </div>
-                        </div>
-
-                        {error && (
-                            <div className="mb-4">
-                                <ErrorState message={error} onRetry={() => fetchResume()} />
-                            </div>
-                        )}
-
-                        <div
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center transition-all cursor-pointer ${loading
-                                ? 'bg-bg-subtle border-border opacity-50 cursor-not-allowed'
-                                : 'bg-bg-subtle/50 border-border hover:border-violet/50 hover:bg-violet/5'
-                                }`}
-                        >
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                className="hidden"
-                                accept=".pdf,.doc,.docx"
-                                disabled={loading}
-                            />
-
-                            {loading ? (
-                                <div className="animate-spin w-8 h-8 border-4 border-violet border-t-transparent rounded-full mb-3" />
-                            ) : (
-                                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                                    <Upload className="text-violet" size={24} />
-                                </div>
-                            )}
-
-                            <h4 className="text-text-primary font-medium mb-1">
-                                {resume ? 'Update your resume' : 'Upload your resume'}
-                            </h4>
-                            <p className="text-text-tertiary text-sm">Supported formats: PDF, DOC (Max 5MB)</p>
-                        </div>
-
-                        {resume && (
-                            <div className="mt-6 flex items-center p-4 bg-success-light/30 border border-success-light rounded-lg">
-                                <div className="w-10 h-10 bg-success-light rounded-lg flex items-center justify-center text-success mr-4">
-                                    <FileText size={20} />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium text-text-primary">Resume successfully analyzed</p>
-                                    <p className="text-xs text-text-tertiary">Your profile is now ready for mock interviews.</p>
-                                </div>
-                                <div className="text-success">
-                                    <CheckCircle size={20} />
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    <ResumeUpload />
+                    <ParsedResumePreview />
                 </div>
 
                 <div className="space-y-6">

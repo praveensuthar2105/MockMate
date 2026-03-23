@@ -1,27 +1,42 @@
-import { useState, useEffect } from 'react';
-import Editor from '@monaco-editor/react';
-import { Play, CheckCircle2, Loader2 } from 'lucide-react';
+import { useState, useEffect, lazy } from 'react';
+import { Play, CheckCircle2, Loader2, Lightbulb } from 'lucide-react';
 import { codeService } from '../../services/codeService';
-import type { ExecutionResult, DsaProblem, CodeEvaluation } from '../../types';
+import { useInterviewStore } from '../../store/interviewStore';
+
+const Editor = lazy(() => import('@monaco-editor/react'));
 
 interface DsaPanelProps {
     sessionId: number;
-    problem: DsaProblem | null;
 }
 
-export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) {
-    const [problem, setProblem] = useState<DsaProblem | null>(initialProblem);
-    const [language, setLanguage] = useState<string>('java');
-    const [code, setCode] = useState<string>('import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        // Read input using Scanner\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here...\n        \n    }\n}');
-    const [output, setOutput] = useState<ExecutionResult | null>(null);
-    const [evaluation, setEvaluation] = useState<CodeEvaluation | null>(null);
-    const [isRunning, setIsRunning] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isSubmitted, setIsSubmitted] = useState(false);
+export function DsaPanel({ sessionId }: DsaPanelProps) {
+    const {
+        dsaProblem: problem,
+        setProblem,
+        code,
+        setCode,
+        language,
+        setLanguage,
+        executionResult: output,
+        setExecutionResult: setOutput,
+        codeEvaluation: evaluation,
+        setEvaluation,
+        hintsUsed,
+        useHint,
+        isRunning,
+        setRunning: setIsRunning,
+        isSubmitting,
+        setSubmitting: setIsSubmitting,
+        submitted: isSubmitted,
+        setSubmitted: setIsSubmitted
+    } = useInterviewStore();
+
     const [leftWidth, setLeftWidth] = useState(35); // percentage
     const [activeTab, setActiveTab] = useState<'output' | 'testcases' | 'evaluation'>('testcases');
     const [customTestCases, setCustomTestCases] = useState<string>('');
     const [isResizing, setIsResizing] = useState(false);
+    const [hintText, setHintText] = useState<string | null>(null);
+    const [isLoadingHint, setIsLoadingHint] = useState(false);
 
     useEffect(() => {
         if (isResizing) {
@@ -77,12 +92,32 @@ export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) 
         }
     };
 
+    const handleHint = async () => {
+        if (hintsUsed >= 3) return;
+        setIsLoadingHint(true);
+        try {
+            const nextLevel = hintsUsed + 1;
+            const hint = await codeService.getHint(sessionId, nextLevel);
+            setHintText(hint);
+            useHint();
+        } catch (error) {
+            console.error('Failed to get hint:', error);
+        } finally {
+            setIsLoadingHint(false);
+        }
+    };
+
     const executeCode = async (isSubmit: boolean) => {
         if (!problem) return;
         const setStatus = isSubmit ? setIsSubmitting : setIsRunning;
         setStatus(true);
         try {
             if (isSubmit) {
+                const confirmSubmit = window.confirm("Submit your final solution? You cannot change it after.");
+                if (!confirmSubmit) {
+                    setStatus(false);
+                    return;
+                }
                 const res = await codeService.submitCode(sessionId, problem.title, code, language);
                 setEvaluation(res);
                 setIsSubmitted(true);
@@ -174,6 +209,15 @@ export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) 
                             </div>
                         </div>
                     ))}
+
+                    {hintText && (
+                        <div className="mt-6 p-4 bg-violet/5 border border-violet/20 rounded-lg">
+                            <h4 className="font-semibold text-xs text-violet uppercase tracking-wider mb-2 flex items-center">
+                                <Lightbulb size={14} className="mr-1" /> Hint
+                            </h4>
+                            <p className="text-sm text-text-secondary">{hintText}</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -207,6 +251,14 @@ export function DsaPanel({ sessionId, problem: initialProblem }: DsaPanelProps) 
                     </div>
 
                     <div className="flex items-center space-x-2">
+                        <button
+                            onClick={handleHint}
+                            disabled={hintsUsed >= 3 || isSubmitted || isLoadingHint}
+                            className="flex items-center space-x-1.5 px-3 py-1.5 bg-bg-subtle hover:bg-bg-overlay border border-border text-text-primary text-xs font-medium rounded-md transition-all disabled:opacity-50"
+                        >
+                            {isLoadingHint ? <Loader2 size={14} className="animate-spin" /> : <Lightbulb size={14} />}
+                            <span>Hint ({3 - hintsUsed} left)</span>
+                        </button>
                         <button
                             onClick={handleRun}
                             disabled={isRunning || isSubmitting || isSubmitted}

@@ -40,7 +40,8 @@ public class SessionController {
             @Valid @RequestBody InterviewRequest request) {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        return ResponseEntity.ok(interviewService.createSession(user.getId(), request));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(interviewService.createSession(user.getId(), request));
     }
 
     @PostMapping("/{id}/start")
