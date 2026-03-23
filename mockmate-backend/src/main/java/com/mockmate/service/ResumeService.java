@@ -26,6 +26,7 @@ public class ResumeService {
     private final ResumeRepository resumeRepository;
     private final UserRepository userRepository;
     private final PdfParserService pdfParserService;
+    private final GeminiParsingService geminiParsingService;
 
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
@@ -53,11 +54,18 @@ public class ResumeService {
             // Extract Text
             String rawText = pdfParserService.extractText(file);
 
-            // For now, simply map raw text to parsed JSON placeholders.
-            // In Phase 2, an AI agent will convert rawText into structured JSON/skills.
-            String parsedJson = "{\"status\": \"pending\"}";
-            String skills = "Raw Upload";
-            String summary = "Raw Upload";
+            // Use Gemini to parse resume text into structured JSON
+            String parsedJson = "{}";
+            try {
+                parsedJson = geminiParsingService.parseResume(rawText);
+            } catch (Exception e) {
+                // Fallback handled inside GeminiParsingService
+                parsedJson = "{\"status\": \"failed\"}";
+            }
+
+            // Extract basic info from the JSON if needed or just store the JSON
+            String skills = extractFromJson(parsedJson, "skills");
+            String summary = extractFromJson(parsedJson, "summary");
 
             // Save to DB
             Resume resume = resumeRepository.findByUserId(user.getId()).orElse(new Resume());
@@ -91,6 +99,19 @@ public class ResumeService {
                 .orElseThrow(() -> new IllegalArgumentException("Resume not found"));
 
         return mapToResponse(resume);
+    }
+
+    private String extractFromJson(String json, String key) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+            if (root.has(key)) {
+                return root.get(key).toString();
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return "Not specified";
     }
 
     private ResumeResponse mapToResponse(Resume resume) {

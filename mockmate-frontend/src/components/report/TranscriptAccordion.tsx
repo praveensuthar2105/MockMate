@@ -70,9 +70,8 @@ export function TranscriptAccordion({ phases }: TranscriptAccordionProps) {
                                                 <MessageBubble
                                                     key={msg.id}
                                                     content={msg.content}
-                                                    sender={msg.sender}
+                                role={msg.role}
                                                     timestamp={msg.timestamp}
-                                                    type={msg.type}
                                                 />
                                             ))
                                         )}

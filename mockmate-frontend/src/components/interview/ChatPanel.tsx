@@ -4,7 +4,6 @@ import { TypingIndicator } from './TypingIndicator';
 import { SendHorizontal, Volume2, VolumeX } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore';
 import { useWebSocket } from '../../hooks/useWebSocket';
-import { ArrowRight } from 'lucide-react';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
 import { VoiceMicButton } from './VoiceMicButton';
 
@@ -22,7 +21,7 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
     const [isMinimized, setIsMinimized] = useState(isFloating);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const { messages, isTyping, addMessage } = useSessionStore();
-    const { sendMessage, sendPhaseComplete, isConnected } = useWebSocket(sessionId);
+    const { sendMessage, isConnected } = useWebSocket(sessionId);
 
     const { speak, stop: stopSpeaking } = useVoiceOutput();
 
@@ -53,7 +52,7 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
     useEffect(() => {
         if (isVoiceEnabled && messages.length > 0) {
             const lastMessage = messages[messages.length - 1];
-            if (lastMessage.sender === 'AI' || lastMessage.sender === 'SYSTEM') {
+            if (lastMessage.role === 'AI' || lastMessage.role === 'SYSTEM') {
                 speak(lastMessage.content);
             }
         }
@@ -76,10 +75,9 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
                     if (content && isConnected) {
                         addMessage({
                             id: Date.now(),
-                            sender: 'USER',
+                            role: 'USER',
                             content,
                             timestamp: new Date().toISOString(),
-                            type: 'TEXT'
                         });
                         sendMessage(content);
                         return '';
@@ -98,10 +96,9 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
         // Optimistic Update
         addMessage({
             id: Date.now(),
-            sender: 'USER',
+            role: 'USER',
             content,
             timestamp: new Date().toISOString(),
-            type: 'TEXT'
         });
 
         sendMessage(content);
@@ -155,15 +152,6 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
                     >
                         {isVoiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
                     </button>
-                    {isConnected && messages.length > 2 && (
-                        <button
-                            onClick={() => sendPhaseComplete()}
-                            className={`flex items-center space-x-1.5 bg-violet text-white font-bold rounded-lg hover:bg-violet-dark transition-colors shadow-sm shadow-violet/20 ${isFloating ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-[11px]'}`}
-                        >
-                            <span>Next</span>
-                            <ArrowRight size={12} />
-                        </button>
-                    )}
                 </div>
             </div>
 
@@ -179,9 +167,8 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
                     <MessageBubble
                         key={msg.id}
                         content={msg.content}
-                        sender={msg.sender}
+                        role={msg.role}
                         timestamp={msg.timestamp}
-                        type={msg.type}
                     />
                 ))}
                 {isTyping && <TypingIndicator />}

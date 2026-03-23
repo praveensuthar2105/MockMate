@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { resumeService } from '../services/resumeService';
+import type { ResumeResponse } from '../services/resumeService';
 
 interface ProfileState {
-    resume: { url: string; text: string } | null;
+    resume: ResumeResponse | null;
     loading: boolean;
     error: string | null;
     uploadResume: (file: File) => Promise<void>;

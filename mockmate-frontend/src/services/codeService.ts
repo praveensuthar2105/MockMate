@@ -14,9 +14,11 @@ export const codeService = {
         try {
             const response = await api.post('/api/code/run', {
                 sessionId,
-                language: language.toUpperCase(),
+                language: language.toLowerCase(),
                 code,
                 customInput
+            }, {
+                timeout: 10000
             });
             return response.data;
         } catch (error: any) {
@@ -27,12 +29,25 @@ export const codeService = {
         try {
             const response = await api.post('/api/code/submit', {
                 sessionId,
-                language: language.toUpperCase(),
+                language: language.toLowerCase(),
                 code
+            }, {
+                timeout: 15000
             });
             return response.data;
         } catch (error: any) {
             throw new Error(error.response?.data?.message || 'Failed to evaluate code');
+        }
+    },
+    getHint: async (sessionId: number, level: number): Promise<string> => {
+        try {
+            const response = await api.post('/api/code/hint', {
+                sessionId,
+                level
+            });
+            return response.data.hint;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.message || 'Failed to get hint');
         }
     }
 };

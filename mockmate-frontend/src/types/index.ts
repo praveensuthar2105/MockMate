@@ -37,6 +37,7 @@ export type MessageRole = 'USER' | 'AI'
 
 export interface InterviewSession {
     id: number
+    companyName?: string
     jobRole: string
     difficulty: Difficulty
     interviewType: InterviewType
@@ -55,10 +56,10 @@ export interface InterviewSession {
 
 export interface ChatMessage {
     id: number
-    sender: 'USER' | 'AI' | 'SYSTEM'
+    role: 'USER' | 'AI' | 'SYSTEM'
     content: string
     timestamp: string
-    type: 'TEXT' | 'CODE' | 'FEEDBACK'
+    type?: 'TEXT' | 'CODE' | 'FEEDBACK'
     phase?: PhaseType
 }
 

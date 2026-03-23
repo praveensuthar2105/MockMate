@@ -42,77 +42,57 @@ export default function InterviewRoomPage() {
     if (!currentSession) return null;
 
     return (
-        <div className="flex flex-col h-[calc(100vh-64px)] -m-8 p-4 md:p-6 lg:p-8 overflow-hidden">
-
-            {/* Header Area */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 shrink-0 gap-4">
-                <div>
-                    <div className="flex items-center space-x-3 mb-1">
-                        <h1 className="text-2xl font-display font-semibold text-text-primary tracking-tight">
-                            {currentSession.jobRole} Interview
-                        </h1>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${isConnected ? 'bg-success-light text-success' : 'bg-warning-light text-warning'
-                            }`}>
-                            {isConnected ? 'Live' : 'Connecting...'}
-                        </span>
-                    </div>
-                    <p className="text-text-secondary text-sm">
-                        {currentSession.companyName} company standards applied.
-                    </p>
-                </div>
-
-                <div className="flex items-center space-x-6 md:space-x-8">
-                    {/* Voice Toggle */}
+        <div className="flex flex-col h-screen w-screen overflow-hidden bg-bg-page fixed inset-0 z-50">
+            {/* Top Bar (56px) */}
+            <div className="h-[56px] bg-bg-surface border-b border-border flex items-center justify-between px-6 shrink-0 z-10">
+                <div className="flex items-center space-x-4">
+                    <h1 className="font-display font-semibold text-text-primary text-lg">
+                        {currentSession.companyName || 'MockMate'} Interview
+                    </h1>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${isConnected ? 'bg-success-light text-success' : 'bg-warning-light text-warning'}`}>
+                        {isConnected ? 'Live' : 'Connecting...'}
+                    </span>
                     <button
                         onClick={toggleVoice}
-                        className={`flex items-center space-x-2 px-3 py-1.5 rounded-full transition-all duration-300 border ${voiceEnabled
+                        className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full transition-all border ${voiceEnabled
                                 ? 'bg-violet/10 border-violet/30 text-violet'
                                 : 'bg-bg-subtle border-border text-text-tertiary'
                             }`}
-                        title={voiceEnabled ? 'AI Voice On' : 'AI Voice Off'}
                     >
-                        {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Voice</span>
+                        {voiceEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                        <span className="text-[10px] font-bold uppercase">Voice</span>
                     </button>
+                </div>
 
+                <div className="flex-1 flex justify-center max-w-2xl px-4">
                     <PhaseProgressBar currentPhase={currentSession.currentPhase} />
+                </div>
+
+                <div className="flex items-center justify-end min-w-[120px]">
                     <CountdownTimer />
                 </div>
             </div>
 
-            {/* Main Workspace Area */}
-            <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 overflow-hidden relative">
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-row overflow-hidden">
+                {/* Left Panel: Chat (44%) */}
+                <div className="w-[44%] h-full border-r border-border flex flex-col bg-bg-surface shrink-0">
+                    <ChatPanel sessionId={Number(id)} />
+                </div>
 
-                {/* Left Side: Chat Panel (only if not DSA) */}
-                {currentSession.currentPhase !== 'DSA' && (
-                    <div className="w-full lg:w-[400px] h-full shrink-0 flex flex-col">
-                        <ChatPanel sessionId={Number(id)} />
-                    </div>
-                )}
-
-                {/* Right Side: Workspace Area (Dynamic based on phase) */}
-                <div className="flex-1 h-full min-h-0">
+                {/* Right Panel: Phase Content (56%) */}
+                <div className="w-[56%] h-full bg-bg-page overflow-y-auto">
                     {currentSession.currentPhase === 'RESUME_SCREEN' && <ResumePanel />}
-                    {currentSession.currentPhase === 'DSA' && (
-                        <>
-                            <DsaPanel
-                                sessionId={Number(id)}
-                                problem={null}
-                            />
-                            <ChatPanel sessionId={Number(id)} isFloating={true} />
-                        </>
-                    )}
+                    {currentSession.currentPhase === 'DSA' && <DsaPanel sessionId={Number(id)} />}
                     {currentSession.currentPhase === 'SYSTEM_DESIGN' && <SystemDesignPanel />}
                     {currentSession.currentPhase === 'HR' && <HrPanel />}
 
-                    {/* Neutral state/Fallback */}
                     {!['RESUME_SCREEN', 'DSA', 'SYSTEM_DESIGN', 'HR'].includes(currentSession.currentPhase) && (
-                        <div className="flex-1 h-full bg-bg-surface border border-border rounded-xl shadow-sm flex items-center justify-center">
+                        <div className="h-full flex items-center justify-center">
                             <p className="text-text-tertiary">Waiting for next phase...</p>
                         </div>
                     )}
                 </div>
-
             </div>
         </div>
     );

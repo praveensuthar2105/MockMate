@@ -58,14 +58,41 @@ public class InterviewService {
         };
         session.setCurrentPhase(initialPhase);
 
-        if (request.getResumeDurationMins() != null)
+        if (request.getResumeDurationMins() != null) {
+            if (request.getResumeDurationMins() < 3 || request.getResumeDurationMins() > 15) {
+                throw new IllegalArgumentException("Resume duration must be between 3 and 15 minutes");
+            }
             session.setResumeDurationMins(request.getResumeDurationMins());
-        if (request.getDsaDurationMins() != null)
+        } else {
+            session.setResumeDurationMins(5);
+        }
+
+        if (request.getDsaDurationMins() != null) {
+            if (request.getDsaDurationMins() < 15 || request.getDsaDurationMins() > 60) {
+                throw new IllegalArgumentException("DSA duration must be between 15 and 60 minutes");
+            }
             session.setDsaDurationMins(request.getDsaDurationMins());
-        if (request.getSystemDesignDurationMins() != null)
+        } else {
+            session.setDsaDurationMins(30);
+        }
+
+        if (request.getSystemDesignDurationMins() != null) {
+            if (request.getSystemDesignDurationMins() < 10 || request.getSystemDesignDurationMins() > 30) {
+                throw new IllegalArgumentException("System Design duration must be between 10 and 30 minutes");
+            }
             session.setSystemDesignDurationMins(request.getSystemDesignDurationMins());
-        if (request.getHrDurationMins() != null)
+        } else {
+            session.setSystemDesignDurationMins(15);
+        }
+
+        if (request.getHrDurationMins() != null) {
+            if (request.getHrDurationMins() < 5 || request.getHrDurationMins() > 20) {
+                throw new IllegalArgumentException("HR duration must be between 5 and 20 minutes");
+            }
             session.setHrDurationMins(request.getHrDurationMins());
+        } else {
+            session.setHrDurationMins(10);
+        }
 
         InterviewSession saved = sessionRepository.save(session);
         log.info("Interview session created: id={}, user={}, company={}", saved.getId(), userId, request.getCompany());

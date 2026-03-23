@@ -6,6 +6,7 @@ export const mapInterviewResponseToSession = (data: any): InterviewSession => {
         companyName: data.company,
         jobRole: data.jobRole,
         difficulty: data.difficulty,
+        interviewType: data.interviewType || 'FULL_MOCK',
         status: data.status,
         currentPhase: data.currentPhase,
         phaseEndTime: data.phaseEndTime,
@@ -18,7 +19,7 @@ export const mapInterviewResponseToSession = (data: any): InterviewSession => {
         hrDurationMins: data.hrDurationMins,
         messages: data.messages?.map((msg: any) => ({
             id: msg.id,
-            sender: msg.role === 'AI' ? 'AI' : 'USER',
+            role: msg.role === 'AI' ? 'AI' : 'USER',
             content: msg.content,
             timestamp: msg.timestamp,
             type: 'TEXT', // Default type
