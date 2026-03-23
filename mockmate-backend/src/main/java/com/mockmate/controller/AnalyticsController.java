@@ -1,6 +1,6 @@
 package com.mockmate.controller;
 
-import com.mockmate.dto.response.AnalyticsResponse;
+import com.mockmate.dto.response.AnalyticsOverviewResponse;
 import com.mockmate.model.User;
 import com.mockmate.repository.UserRepository;
 import com.mockmate.service.AnalyticsService;
@@ -21,9 +21,9 @@ public class AnalyticsController {
     private final UserRepository userRepository;
 
     @GetMapping("/overview")
-    public ResponseEntity<AnalyticsResponse> getOverview(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<AnalyticsOverviewResponse> getOverview(@AuthenticationPrincipal UserDetails userDetails) {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        return ResponseEntity.ok(analyticsService.getUserAnalytics(user.getId()));
+        return ResponseEntity.ok(analyticsService.getOverview(user.getId()));
     }
 }

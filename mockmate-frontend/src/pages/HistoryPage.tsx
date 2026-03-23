@@ -13,13 +13,13 @@ export default function HistoryPage() {
     const [totalPages, setTotalPages] = useState(0);
     const pageSize = 10;
 
-    const fetchHistory = async (pageNumber: number) => {
+    const fetchHistory = async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await reportService.getHistory(pageNumber, pageSize);
-            setSessions(response.content || []);
-            setTotalPages(response.totalPages || 0);
+            const response = await reportService.getHistory();
+            setSessions(response || []);
+            setTotalPages(Math.ceil((response?.length || 0) / pageSize));
         } catch (err: any) {
             setError(err.message || 'Failed to fetch history');
         } finally {
@@ -28,8 +28,10 @@ export default function HistoryPage() {
     };
 
     useEffect(() => {
-        fetchHistory(page);
-    }, [page]);
+        fetchHistory();
+    }, []);
+
+    const paginatedSessions = sessions.slice(page * pageSize, (page + 1) * pageSize);
 
     return (
         <div className="animate-in fade-in duration-500 pb-12">
@@ -46,7 +48,7 @@ export default function HistoryPage() {
                     <h3 className="text-lg font-bold text-text-primary mb-2">Error Loading History</h3>
                     <p className="text-text-secondary mb-6">{error}</p>
                     <button
-                        onClick={() => fetchHistory(page)}
+                        onClick={() => fetchHistory()}
                         className="px-6 py-2 bg-violet text-white rounded-xl font-bold hover:bg-violet-dark transition-colors"
                     >
                         Try Again
@@ -60,7 +62,7 @@ export default function HistoryPage() {
                                 <Loader2 className="animate-spin text-violet" size={32} />
                             </div>
                         )}
-                        <RecentSessionsTable sessions={sessions} title="Historical Sessions" showViewAll={false} />
+                        <RecentSessionsTable sessions={paginatedSessions} />
                     </div>
 
                     {/* Pagination */}

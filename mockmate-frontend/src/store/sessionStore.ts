@@ -14,6 +14,7 @@ interface SessionState {
     fetchRecentSessions: () => Promise<void>;
     fetchSession: (id: number) => Promise<void>;
     updateSession: (update: Partial<InterviewSession>) => void;
+    updatePhase: (phase: string) => void;
     addMessage: (message: ChatMessage) => void;
     setTyping: (isTyping: boolean) => void;
     setTimeRemaining: (seconds: number | null) => void;
@@ -38,10 +39,13 @@ export const useSessionStore = create<SessionState>((set) => ({
     updateSession: (update) => set((state) => ({
         currentSession: state.currentSession ? { ...state.currentSession, ...update } : null
     })),
+    updatePhase: (phase) => set((state) => ({
+        currentSession: state.currentSession ? { ...state.currentSession, currentPhase: phase as any } : null
+    })),
     fetchSession: async (id: number) => {
         set({ loading: true, error: null });
         try {
-            const response = await api.get(`/api/sessions/${id}`);
+            const response = await api.get(`/api/interviews/${id}`);
             const session = mapInterviewResponseToSession(response.data);
             set({ currentSession: session, loading: false });
         } catch (error: any) {
@@ -51,7 +55,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     fetchRecentSessions: async () => {
         set({ loading: true, error: null });
         try {
-            const response = await api.get('/api/sessions/me');
+            const response = await api.get('/api/interviews/me');
             const sessions = response.data.map(mapInterviewResponseToSession);
             set({ recentSessions: sessions, loading: false });
         } catch (error: any) {

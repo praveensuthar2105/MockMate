@@ -1,28 +1,47 @@
-import type { InterviewSession } from '../types';
+import type { ChatMessage, InterviewSession } from '../types';
 
-export const mapInterviewResponseToSession = (data: any): InterviewSession => {
+interface BackendInterviewResponse {
+    id: number;
+    company: string;
+    difficulty: string;
+    status: InterviewSession['status'];
+    currentPhase: InterviewSession['currentPhase'];
+    phaseEndTime: string | null;
+    startedAt: string;
+    totalScore: number | null;
+}
+
+interface BackendChatResponse {
+    id: number;
+    role: 'USER' | 'AI';
+    content: string;
+    phaseType: ChatMessage['phase'] | null;
+    createdAt: string;
+}
+
+export function mapInterviewResponseToSession(response: BackendInterviewResponse): InterviewSession {
     return {
-        id: data.id,
-        companyName: data.company,
-        jobRole: data.jobRole,
-        difficulty: data.difficulty,
-        status: data.status,
-        currentPhase: data.currentPhase,
-        phaseEndTime: data.phaseEndTime,
-        startedAt: data.startedAt,
-        endedAt: data.endedAt,
-        overallScore: data.totalScore,
-        resumeDurationMins: data.resumeDurationMins,
-        dsaDurationMins: data.dsaDurationMins,
-        systemDesignDurationMins: data.systemDesignDurationMins,
-        hrDurationMins: data.hrDurationMins,
-        messages: data.messages?.map((msg: any) => ({
-            id: msg.id,
-            sender: msg.role === 'AI' ? 'AI' : 'USER',
-            content: msg.content,
-            timestamp: msg.timestamp,
-            type: 'TEXT', // Default type
-            phase: msg.phase
-        }))
+        id: response.id,
+        jobRole: 'Interview',
+        companyName: response.company,
+        difficulty: (response.difficulty?.toUpperCase() as InterviewSession['difficulty']) || 'MEDIUM',
+        interviewType: 'FULL_MOCK',
+        status: response.status,
+        currentPhase: response.currentPhase,
+        phaseEndTime: response.phaseEndTime,
+        overallScore: response.totalScore,
+        startedAt: response.startedAt,
+        endedAt: null,
     };
-};
+}
+
+export function mapChatResponseToMessage(response: BackendChatResponse): ChatMessage {
+    return {
+        id: response.id,
+        role: response.role,
+        content: response.content,
+        timestamp: response.createdAt,
+        type: 'TEXT',
+        phase: response.phaseType || undefined,
+    };
+}

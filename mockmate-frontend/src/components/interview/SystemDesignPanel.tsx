@@ -1,17 +1,8 @@
 import { PenTool } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 export function SystemDesignPanel() {
-    const [Excalidraw, setExcalidraw] = useState<any>(null);
-
-    useEffect(() => {
-        // Temporarily disabled for QA audit readiness
-        /*
-        import('@excalidraw/excalidraw').then((comp) => {
-            setExcalidraw(comp.Excalidraw);
-        });
-        */
-    }, []);
+    const [Excalidraw] = useState<any>(null);
 
     return (
         <div className="flex-1 h-full bg-bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden">

@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { analyticsService } from '../services/analyticsService';
-import type { AnalyticsResponse } from '../types';
+import type { DashboardMetrics } from '../services/analyticsService';
 
 interface AnalyticsState {
-    overview: AnalyticsResponse | null;
+    overview: DashboardMetrics | null;
     loading: boolean;
     error: string | null;
     fetchOverview: () => Promise<void>;

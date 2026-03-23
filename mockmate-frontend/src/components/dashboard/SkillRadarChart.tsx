@@ -1,7 +1,7 @@
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface SkillRadarChartProps {
-    data: { skill: string; score: number; fullMark: number }[];
+    data: { subject: string; A: number; fullMark: number }[];
 }
 
 export function SkillRadarChart({ data }: SkillRadarChartProps) {
@@ -14,7 +14,7 @@ export function SkillRadarChart({ data }: SkillRadarChartProps) {
                         <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
                             <PolarGrid stroke="var(--border)" />
                             <PolarAngleAxis
-                                dataKey="skill"
+                                dataKey="subject"
                                 tick={{ fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 500 }}
                             />
                             <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
@@ -27,7 +27,7 @@ export function SkillRadarChart({ data }: SkillRadarChartProps) {
                             />
                             <Radar
                                 name="Score"
-                                dataKey="score"
+                                dataKey="A"
                                 stroke="var(--violet)"
                                 strokeWidth={2}
                                 fill="var(--violet)"

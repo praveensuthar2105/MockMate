@@ -1,47 +1,29 @@
 import { api } from './api';
-import { mapInterviewResponseToSession } from './sessionMapper';
 import type { InterviewSession } from '../types';
-
-export interface SessionRequest {
-    company: string;
-    jobRole: string;
-    difficulty: string;
-    resumeDurationMins?: number;
-    dsaDurationMins?: number;
-    systemDesignDurationMins?: number;
-    hrDurationMins?: number;
-    type?: string;
-}
+import { mapInterviewResponseToSession } from './sessionMapper';
 
 export const sessionService = {
-    createSession: async (jobRole: string, company: string, difficulty: string, type: string = 'FULL_MOCK'): Promise<InterviewSession> => {
-        try {
-            const request: SessionRequest = {
-                jobRole,
-                company,
-                difficulty,
-                type
-            };
-            const response = await api.post('/api/sessions/create', request);
-            return mapInterviewResponseToSession(response.data);
-        } catch (error: any) {
-            throw new Error(error.response?.data?.message || 'Failed to create session');
-        }
+    createSession: async (jobRole: string, companyName: string, difficulty: string): Promise<InterviewSession> => {
+        void jobRole;
+        const response = await api.post('/api/interviews/start', {
+            company: companyName,
+            difficulty
+        });
+        return mapInterviewResponseToSession(response.data);
     },
-    start: async (sessionId: number): Promise<InterviewSession> => {
-        try {
-            const response = await api.post(`/api/sessions/${sessionId}/start`);
-            return mapInterviewResponseToSession(response.data);
-        } catch (error: any) {
-            throw new Error(error.response?.data?.message || 'Failed to start session');
-        }
+
+    getSession: async (id: number): Promise<InterviewSession> => {
+        const response = await api.get(`/api/interviews/${id}`);
+        return mapInterviewResponseToSession(response.data);
     },
-    getById: async (sessionId: number): Promise<InterviewSession> => {
-        try {
-            const response = await api.get(`/api/sessions/${sessionId}`);
-            return mapInterviewResponseToSession(response.data);
-        } catch (error: any) {
-            throw new Error(error.response?.data?.message || 'Failed to fetch session');
-        }
+
+    getById: async (id: number): Promise<InterviewSession> => {
+        const response = await api.get(`/api/interviews/${id}`);
+        return mapInterviewResponseToSession(response.data);
+    },
+
+    endSession: async (id: number): Promise<InterviewSession> => {
+        const response = await api.post(`/api/interviews/${id}/end`);
+        return mapInterviewResponseToSession(response.data);
     }
 };

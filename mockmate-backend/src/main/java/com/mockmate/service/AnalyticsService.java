@@ -1,61 +1,89 @@
 package com.mockmate.service;
 
-import com.mockmate.dto.response.AnalyticsResponse;
-import com.mockmate.dto.response.ScoreTrend;
-import com.mockmate.dto.response.SkillDistribution;
+import com.mockmate.dto.response.AnalyticsOverviewResponse;
 import com.mockmate.model.InterviewSession;
+import com.mockmate.model.PhaseResult;
+import com.mockmate.model.PhaseType;
 import com.mockmate.repository.InterviewSessionRepository;
+import com.mockmate.repository.PhaseResultRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class AnalyticsService {
 
-        private final InterviewSessionRepository sessionRepository;
+    private final InterviewSessionRepository interviewSessionRepository;
+    private final PhaseResultRepository phaseResultRepository;
 
-        public AnalyticsResponse getUserAnalytics(Long userId) {
-                List<InterviewSession> sessions = sessionRepository.findByUserId(userId);
+    public AnalyticsOverviewResponse getOverview(Long userId) {
+        List<InterviewSession> sessions = interviewSessionRepository.findByUserIdOrderByStartedAtDesc(userId);
 
-                int totalInterviews = sessions.size();
-                int avgScore = sessions.stream()
-                                .filter(s -> s.getTotalScore() != null)
-                                .mapToInt(InterviewSession::getTotalScore)
-                                .average()
-                                .isPresent() ? (int) sessions.stream()
-                                                .filter(s -> s.getTotalScore() != null)
-                                                .mapToInt(InterviewSession::getTotalScore)
-                                                .average()
-                                                .getAsDouble() : 0;
+        List<Integer> validScores = sessions.stream()
+                .map(InterviewSession::getTotalScore)
+                .filter(score -> score != null && score >= 0)
+                .toList();
 
-                List<ScoreTrend> trends = new ArrayList<>();
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd");
+        int totalInterviews = sessions.size();
+        int averageScore = validScores.isEmpty() ? 0 : (int) Math.round(validScores.stream()
+                .mapToInt(Integer::intValue)
+                .average()
+                .orElse(0));
+        int highestScore = validScores.stream().mapToInt(Integer::intValue).max().orElse(0);
 
-                sessions.stream()
-                                .filter(s -> s.getStartedAt() != null && s.getTotalScore() != null)
-                                .sorted((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
-                                .limit(10)
-                                .forEach(s -> trends.add(
-                                                new ScoreTrend(s.getStartedAt().format(formatter), s.getTotalScore())));
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd");
+        List<AnalyticsOverviewResponse.TrendPoint> recentTrends = sessions.stream()
+                .filter(session -> session.getStartedAt() != null)
+                .sorted(Comparator.comparing(InterviewSession::getStartedAt))
+                .skip(Math.max(0, sessions.size() - 7L))
+                .map(session -> AnalyticsOverviewResponse.TrendPoint.builder()
+                        .date(session.getStartedAt().format(formatter))
+                        .score(session.getTotalScore() == null ? 0 : session.getTotalScore())
+                        .build())
+                .toList();
 
-                // Mock skill distribution for now
-                List<SkillDistribution> skills = List.of(
-                                new SkillDistribution("Communication", 75, 100),
-                                new SkillDistribution("Technical", 80, 100),
-                                new SkillDistribution("Problem Solving", avgScore > 0 ? avgScore : 70, 100),
-                                new SkillDistribution("Leadership", 65, 100),
-                                new SkillDistribution("HR Alignment", 85, 100));
+        List<Long> sessionIds = sessions.stream().map(InterviewSession::getId).toList();
+        List<PhaseResult> phaseResults = sessionIds.isEmpty()
+                ? List.of()
+                : phaseResultRepository.findBySessionIdIn(sessionIds);
 
-                return AnalyticsResponse.builder()
-                                .totalInterviews(totalInterviews)
-                                .averageScore(avgScore)
-                                .topSkill("Technical")
-                                .scoreTrends(trends)
-                                .skillDistributions(skills)
-                                .build();
-        }
+        Map<PhaseType, Integer> phaseAverages = phaseResults.stream()
+                .filter(result -> result.getScore() != null)
+                .collect(Collectors.groupingBy(
+                        PhaseResult::getPhaseType,
+                        Collectors.collectingAndThen(
+                                Collectors.averagingInt(PhaseResult::getScore),
+                                avg -> (int) Math.round(avg)
+                        )
+                ));
+
+        List<AnalyticsOverviewResponse.SkillPoint> skillRadar = List.of(
+                buildSkill("Algorithms", phaseAverages.getOrDefault(PhaseType.DSA, 0)),
+                buildSkill("System Design", phaseAverages.getOrDefault(PhaseType.SYSTEM_DESIGN, 0)),
+                buildSkill("Communication", phaseAverages.getOrDefault(PhaseType.HR, 0)),
+                buildSkill("Problem Solving", phaseAverages.getOrDefault(PhaseType.RESUME_SCREEN, 0))
+        );
+
+        return AnalyticsOverviewResponse.builder()
+                .totalInterviews(totalInterviews)
+                .averageScore(averageScore)
+                .highestScore(highestScore)
+                .recentTrends(recentTrends)
+                .skillRadar(skillRadar)
+                .build();
+    }
+
+    private AnalyticsOverviewResponse.SkillPoint buildSkill(String subject, int score) {
+        return AnalyticsOverviewResponse.SkillPoint.builder()
+                .subject(subject)
+                .A(score)
+                .fullMark(100)
+                .build();
+    }
 }

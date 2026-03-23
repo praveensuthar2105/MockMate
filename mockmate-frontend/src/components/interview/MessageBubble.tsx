@@ -1,13 +1,12 @@
 interface MessageBubbleProps {
     content: string;
-    sender: 'USER' | 'AI' | 'SYSTEM';
+    role: string;
     timestamp: string;
-    type?: 'TEXT' | 'CODE' | 'FEEDBACK';
 }
 
-export function MessageBubble({ content, sender, timestamp, type = 'TEXT' }: MessageBubbleProps) {
-    const isUser = sender === 'USER';
-    const isSystem = sender === 'SYSTEM';
+export function MessageBubble({ content, role, timestamp }: MessageBubbleProps) {
+    const isUser = role === 'USER';
+    const isSystem = role === 'SYSTEM';
 
     if (isSystem) {
         return (
@@ -29,10 +28,10 @@ export function MessageBubble({ content, sender, timestamp, type = 'TEXT' }: Mes
 
             <div className={`max-w-[80%] lg:max-w-[70%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
                 <div
-                    className={`px-4 py-3 rounded-2xl shadow-sm overflow-hidden ${isUser
+                    className={`px-4 py-3 rounded-2xl shadow-sm overflow-hidden text-[15px] leading-relaxed whitespace-pre-wrap ${isUser
                             ? 'bg-violet text-white rounded-br-sm'
                             : 'bg-bg-surface border border-border text-text-primary rounded-bl-sm'
-                        } ${type === 'CODE' ? 'font-mono text-[13px] whitespace-pre-wrap' : 'text-[15px] leading-relaxed'}`}
+                        }`}
                 >
                     {content}
                 </div>
@@ -41,12 +40,6 @@ export function MessageBubble({ content, sender, timestamp, type = 'TEXT' }: Mes
                     {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
             </div>
-
-            {isUser && (
-                <div className="w-8 h-8 rounded-full bg-bg-overlay border border-border flex items-center justify-center shrink-0 shadow-sm ml-3">
-                    <span className="font-display font-medium text-text-secondary text-xs">You</span>
-                </div>
-            )}
         </div>
     );
 }

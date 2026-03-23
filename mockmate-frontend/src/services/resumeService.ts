@@ -1,7 +1,16 @@
 import { api } from './api';
 
+export interface ResumeResponse {
+    id: number;
+    originalFileName: string;
+    parsedJson: string;
+    skills: string;
+    summary: string;
+    uploadedAt: string;
+}
+
 export const resumeService = {
-    upload: async (file: File): Promise<{ url: string; text: string }> => {
+    upload: async (file: File): Promise<ResumeResponse> => {
         const formData = new FormData();
         formData.append('file', file);
 
@@ -16,7 +25,7 @@ export const resumeService = {
             throw new Error(error.response?.data?.message || 'Failed to upload resume');
         }
     },
-    getLatest: async (): Promise<{ url: string; text: string } | null> => {
+    getLatest: async (): Promise<ResumeResponse | null> => {
         try {
             const response = await api.get('/api/resume/me');
             return response.data;
