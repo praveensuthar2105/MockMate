@@ -8,13 +8,11 @@ def print_result(result):
     else:
         print(result)
 
-raw_input = sys.stdin.read().strip()
-lines = raw_input.split('\n') if raw_input else []
-nums = list(map(int, lines[0].strip().split())) if len(lines) > 0 else []
-target = int(lines[1].strip()) if len(lines) > 1 else 0
-
 {{USER_CODE}}
 
+lines = sys.stdin.read().strip().split('\n')
+nums = list(map(int, lines[0].strip().split()))
+target = int(lines[1].strip())
 sol = Solution()
 result = sol.{{methodSignature}}(nums, target)
 print_result(result)

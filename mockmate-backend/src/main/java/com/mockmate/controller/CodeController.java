@@ -171,6 +171,9 @@ public class CodeController {
         CodeSubmission activeSubmission;
         if (!submissions.isEmpty()) {
             activeSubmission = submissions.get(0);
+            if (Boolean.TRUE.equals(activeSubmission.getSubmitted())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Code already submitted for this session");
+            }
         } else {
             activeSubmission = new CodeSubmission();
             activeSubmission.setSession(session);

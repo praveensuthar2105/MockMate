@@ -9,8 +9,9 @@ def build_list(values):
     dummy = ListNode(0)
     curr = dummy
     for v in values:
-        curr.next = ListNode(int(v))
-        curr = curr.next
+        if v != 'null':
+            curr.next = ListNode(int(v))
+            curr = curr.next
     return dummy.next
 
 def serialize_list(head):
@@ -20,13 +21,16 @@ def serialize_list(head):
         head = head.next
     return ' '.join(result)
 
-raw_input = sys.stdin.read().strip()
-lines = raw_input.split('\n') if raw_input else []
-values = lines[0].strip().split() if lines else []
-head = build_list(values)
-
 {{USER_CODE}}
 
+lines = sys.stdin.read().strip().split('\n')
+values = lines[0].strip().split()
+head = build_list(values)
 sol = Solution()
 result = sol.{{methodSignature}}(head)
-print(serialize_list(result))
+if isinstance(result, ListNode):
+    print(serialize_list(result))
+elif isinstance(result, bool):
+    print(str(result).lower())
+else:
+    print(result)
