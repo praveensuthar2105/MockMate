@@ -18,6 +18,8 @@ lines = sys.stdin.read().strip().split('\n')
 dims = lines[0].strip().split()
 rows, cols = int(dims[0]), int(dims[1])
 matrix = []
+if len(lines) < rows + 1:
+    raise Exception("missing matrix rows")
 for i in range(1, rows + 1):
     row = list(map(int, lines[i].strip().split()))
     matrix.append(row)

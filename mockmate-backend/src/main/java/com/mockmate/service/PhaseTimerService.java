@@ -48,9 +48,9 @@ public class PhaseTimerService {
 
     @Scheduled(fixedRate = 1000)
     public void checkTimers() {
-        List<InterviewSession> activeSessions = sessionRepository.findAll();
+        List<InterviewSession> activeSessions = sessionRepository.findByStatusAndPhaseEndTimeIsNotNull(SessionStatus.IN_PROGRESS);
 
-        for (InterviewSession session : activeSessions) {
+                for (InterviewSession session : activeSessions) {
             if (session.getStatus() != SessionStatus.IN_PROGRESS || session.getPhaseEndTime() == null) {
                 continue;
             }
@@ -58,7 +58,12 @@ public class PhaseTimerService {
             long secondsRemaining = ChronoUnit.SECONDS.between(LocalDateTime.now(), session.getPhaseEndTime());
 
             if (secondsRemaining <= 0) {
-                advancePhaseOrComplete(session, false);
+                Object sessionLock = transitionLocks.computeIfAbsent(session.getId(), id -> new Object());
+                try {
+                    advancePhaseOrComplete(session, false);
+                } finally {
+                    transitionLocks.remove(session.getId(), sessionLock);
+                }
             } else if (secondsRemaining % 30 == 0 || secondsRemaining <= 10) {
                 simpMessagingTemplate.convertAndSend(
                         "/topic/session/" + session.getId(),
@@ -67,6 +72,7 @@ public class PhaseTimerService {
         }
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public void advancePhaseOrComplete(InterviewSession inputSession, boolean isManualTrigger) {
         Long sessionId = inputSession.getId();
         Object lock = transitionLocks.computeIfAbsent(sessionId, k -> new Object());

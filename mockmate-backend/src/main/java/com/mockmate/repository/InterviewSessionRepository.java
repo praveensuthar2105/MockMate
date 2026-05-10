@@ -26,4 +26,5 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM InterviewSession s WHERE s.id = :id")
     Optional<InterviewSession> findByIdForUpdate(@Param("id") Long id);
+    List<InterviewSession> findByStatusAndPhaseEndTimeIsNotNull(com.mockmate.model.SessionStatus status);
 }

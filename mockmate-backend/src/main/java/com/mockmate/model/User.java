@@ -40,6 +40,9 @@ public class User {
     @Column(name = "profile_complete")
     private Boolean profileComplete = false;
 
+    @Column(name = "consent_third_party")
+    private Boolean hasConsentedToThirdPartyProcessing = true;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

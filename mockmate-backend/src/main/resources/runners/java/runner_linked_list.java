@@ -15,8 +15,15 @@ public class Main {
         ListNode curr = dummy;
         for (String p : parts) {
             if (!p.equals("null")) {
-                curr.next = new ListNode(
-                    Integer.parseInt(p));
+                try {
+                    try {
+                    curr.next = new ListNode(Integer.parseInt(p));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid integer token in linked list: " + p, e);
+                }
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid integer token in linked list: " + p, e);
+                }
                 curr = curr.next;
             }
         }
@@ -34,18 +41,21 @@ public class Main {
     }
 
     public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
+        try (Scanner sc = new Scanner(System.in)) {
         ListNode head = buildList(sc.nextLine());
         Solution sol = new Solution();
         Object result = sol.{{methodSignature}}(head);
         if (result instanceof ListNode) {
             System.out.println(
                 serializeList((ListNode) result));
-        } else if (result instanceof Boolean) {
+    } else if (result instanceof Boolean) {
             System.out.println(
                 result.toString().toLowerCase());
         } else {
             System.out.println(result);
+            }
+        } finally {
+            sc.close();
         }
     }
 }

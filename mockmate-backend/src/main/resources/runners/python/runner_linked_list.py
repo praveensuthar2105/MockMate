@@ -10,7 +10,10 @@ def build_list(values):
     curr = dummy
     for v in values:
         if v != 'null':
-            curr.next = ListNode(int(v))
+            try:
+                curr.next = ListNode(int(v))
+            except ValueError:
+                raise ValueError("Invalid integer token: " + str(v))
             curr = curr.next
     return dummy.next
 
@@ -26,8 +29,15 @@ def serialize_list(head):
 lines = sys.stdin.read().strip().split('\n')
 values = lines[0].strip().split()
 head = build_list(values)
-sol = Solution()
-result = sol.{{methodSignature}}(head)
+try:
+    sol = Solution()
+    if not hasattr(sol, "{{methodSignature}}"):
+        print("method {{methodSignature}} not found", file=sys.stderr)
+        sys.exit(1)
+    result = sol.{{methodSignature}}(head)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
 if isinstance(result, ListNode):
     print(serialize_list(result))
 elif isinstance(result, bool):

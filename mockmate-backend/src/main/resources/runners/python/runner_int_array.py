@@ -11,7 +11,11 @@ def print_result(result):
 {{USER_CODE}}
 
 lines = sys.stdin.read().strip().split('\n')
-nums = list(map(int, lines[0].strip().split()))
+try:
+    nums = list(map(int, lines[0].strip().split()))
+except ValueError as e:
+    print("ValueError: " + str(e), file=sys.stderr)
+    sys.exit(1)
 sol = Solution()
 result = sol.{{methodSignature}}(nums)
 print_result(result)

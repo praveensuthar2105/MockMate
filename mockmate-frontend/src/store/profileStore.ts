@@ -21,7 +21,11 @@ export const useProfileStore = create<ProfileState>((set) => ({
             const resume = await resumeService.upload(file);
             set({ resume, loading: false });
             // Update auth store as well so guards know the profile is complete
+            try {
             useAuthStore.getState().updateUser({ profileComplete: true });
+        } catch (err) {
+            console.error("Failed to update user profile complete state", err);
+        }
         } catch (error: any) {
             set({ error: error.message, loading: false });
         }

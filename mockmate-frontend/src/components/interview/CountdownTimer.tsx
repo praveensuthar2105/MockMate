@@ -1,24 +1,32 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Timer, AlertTriangle } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore';
 
 export function CountdownTimer() {
-    const { timeRemaining: seconds, setTimeRemaining } = useSessionStore();
+    const { timeRemaining: seconds } = useSessionStore();
+
+        const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
-        if (seconds === null || seconds <= 0) return;
+        if (seconds === null || seconds <= 0) {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            return;
+        }
 
-        const interval = setInterval(() => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(() => {
             const currentSeconds = useSessionStore.getState().timeRemaining;
             if (currentSeconds !== null && currentSeconds > 0) {
                 useSessionStore.getState().setTimeRemaining(currentSeconds - 1);
             } else {
-                clearInterval(interval);
+                if (intervalRef.current) clearInterval(intervalRef.current);
             }
         }, 1000);
 
-        return () => clearInterval(interval);
-    }, [seconds === null, seconds <= 0]);
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+        };
+    }, [seconds]);
 
     const formatTime = (s: number | null) => {
         if (s === null) return '--:--';

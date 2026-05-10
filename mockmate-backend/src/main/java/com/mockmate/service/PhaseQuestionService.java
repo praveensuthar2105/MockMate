@@ -142,7 +142,8 @@ public class PhaseQuestionService {
                 "company", company,
                 "difficulty", difficulty,
                 "phase", phase.name(),
-                "duration", String.valueOf(duration)));
+                "duration", String.valueOf(duration),
+                "candidateName", session.getUser() != null ? String.valueOf(session.getUser().getId()) : "Candidate"));
 
         String phasePrompt = replacePlaceholders(phaseTemplate, Map.of(
                 "company", company,
