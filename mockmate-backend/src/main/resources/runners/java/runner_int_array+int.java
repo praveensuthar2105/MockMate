@@ -2,18 +2,31 @@ import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
+        try (Scanner sc = new Scanner(System.in)) {
         String[] parts = sc.nextLine().trim().split("\\s+");
         int[] nums = new int[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            nums[i] = Integer.parseInt(parts[i]);
-        }
-        int target = Integer.parseInt(
-            sc.nextLine().trim());
+            try {
+                for (int i = 0; i < parts.length; i++) {
+                    nums[i] = Integer.parseInt(parts[i]);
+                }
+            } catch (Exception e) {
+                System.err.println("Invalid array int input");
+                System.exit(1);
+            }
+            int target = 0;
+            try {
+                target = Integer.parseInt(sc.nextLine().trim());
+            } catch (Exception e) {
+                System.err.println("Invalid target int input");
+                System.exit(1);
+            }
         Solution sol = new Solution();
         Object result = sol.{{methodSignature}}(
             nums, target);
         printResult(result);
+        } finally {
+            sc.close();
+        }
     }
 
     static void printResult(Object result) {

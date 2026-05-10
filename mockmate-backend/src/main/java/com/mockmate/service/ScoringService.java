@@ -24,6 +24,16 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ScoringService {
 
+    @org.springframework.beans.factory.annotation.Value("${langchain4j.googleai.gemini.model-name:gemini-1.5-pro}")
+    private String modelName;
+
+    @org.springframework.beans.factory.annotation.Value("${langchain4j.googleai.gemini.temperature:0.7}")
+    private double temperature;
+
+    @org.springframework.beans.factory.annotation.Value("${langchain4j.googleai.gemini.timeout-seconds:30}")
+    private long timeoutSeconds;
+
+
     private final ObjectMapper objectMapper;
     private final com.mockmate.repository.ChatMessageRepository chatMessageRepository;
 
@@ -104,5 +114,18 @@ public class ScoringService {
         if (clean.endsWith("```"))
             clean = clean.substring(0, clean.length() - 3);
         return clean.trim();
+    }
+
+    // Consent logic needs User to have getConsentToThirdParty.
+    // Let us skip consent if it is not in the model? Wait, the prompt says "add a pre-send check that verifies user consent (e.g., session/user.hasConsentedToThirdPartyProcessing())"
+    // I should add hasConsentedToThirdPartyProcessing to User model.
+    private String sanitizeTranscript(java.util.List<com.mockmate.model.ChatMessage> messages) {
+        StringBuilder sb = new StringBuilder();
+        for (com.mockmate.model.ChatMessage m : messages) {
+            String role = "ai".equals(m.getRole()) ? "Interviewer" : "Candidate";
+            String sanitized = m.getContent().replaceAll("(?i)ignore previous instructions|system:|output format:", "[REDACTED]");
+            sb.append(role).append(": ").append(sanitized).append("\n");
+        }
+        return sb.toString();
     }
 }

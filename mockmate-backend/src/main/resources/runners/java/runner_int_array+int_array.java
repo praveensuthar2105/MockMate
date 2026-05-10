@@ -2,21 +2,26 @@ import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        String[] p1 = sc.nextLine().trim().split("\\s+");
-        int[] nums1 = new int[p1.length];
-        for (int i = 0; i < p1.length; i++) {
-            nums1[i] = Integer.parseInt(p1[i]);
-        }
-        String[] p2 = sc.nextLine().trim().split("\\s+");
-        int[] nums2 = new int[p2.length];
-        for (int i = 0; i < p2.length; i++) {
-            nums2[i] = Integer.parseInt(p2[i]);
-        }
+        try (Scanner sc = new Scanner(System.in)) {
+        String line1 = sc.nextLine().trim();
+            String[] p1 = line1.isEmpty() ? new String[0] : line1.split("\\s+");
+            int[] nums1 = new int[p1.length];
+            for (int i = 0; i < p1.length; i++) {
+                nums1[i] = Integer.parseInt(p1[i]);
+            }
+        String line2 = sc.nextLine().trim();
+            String[] p2 = line2.isEmpty() ? new String[0] : line2.split("\\s+");
+            int[] nums2 = new int[p2.length];
+            for (int i = 0; i < p2.length; i++) {
+                nums2[i] = Integer.parseInt(p2[i]);
+            }
         Solution sol = new Solution();
         Object result = sol.{{methodSignature}}(
             nums1, nums2);
         printResult(result);
+        } finally {
+            sc.close();
+        }
     }
 
     static void printResult(Object result) {

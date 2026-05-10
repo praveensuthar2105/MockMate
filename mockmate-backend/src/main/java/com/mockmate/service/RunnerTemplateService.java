@@ -46,6 +46,7 @@ public class RunnerTemplateService {
      * Builds a complete Java Main.java by combining the runner template with user code.
      */
     public String buildJavaMain(String inputFormat, String methodSignature, String userCode) {
+        if (methodSignature == null || userCode == null) throw new IllegalArgumentException("methodSignature and userCode cannot be null");
         String template = loadTemplate("runners/java/", inputFormat, ".java");
         return template
                 .replace("{{methodSignature}}", methodSignature)
@@ -56,6 +57,7 @@ public class RunnerTemplateService {
      * Builds a complete Python solution.py by combining the runner template with user code.
      */
     public String buildPythonRunner(String inputFormat, String methodSignature, String userCode) {
+        if (methodSignature == null || userCode == null) throw new IllegalArgumentException("methodSignature and userCode cannot be null");
         String template = loadTemplate("runners/python/", inputFormat, ".py");
         return template
                 .replace("{{methodSignature}}", methodSignature)
@@ -63,6 +65,7 @@ public class RunnerTemplateService {
     }
 
     private String loadTemplate(String prefix, String inputFormat, String suffix) {
+        if (inputFormat == null) throw new IllegalArgumentException("inputFormat cannot be null");
         String normalizedFormat = inputFormat.toLowerCase().trim();
         String templateName = FORMAT_TO_TEMPLATE.get(normalizedFormat);
 
@@ -75,7 +78,9 @@ public class RunnerTemplateService {
 
         try {
             ClassPathResource resource = new ClassPathResource(path);
-            return new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            try (java.io.InputStream is = resource.getInputStream()) {
+                return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            }
         } catch (IOException e) {
             log.error("Failed to load runner template from {}: {}", path, e.getMessage());
             throw new RuntimeException("Runner template not found: " + path);

@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, useRef } from 'react';
+import { useState, useEffect, lazy } from 'react';
 import { Play, CheckCircle2, Loader2, Lightbulb } from 'lucide-react';
 import { codeService } from '../../services/codeService';
 import { useInterviewStore } from '../../store/interviewStore';
@@ -36,7 +36,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
     const [hintText, setHintText] = useState<string | null>(null);
     const [isLoadingHint, setIsLoadingHint] = useState(false);
 
-    const leftRef = useRef<HTMLDivElement>(null);
+    // const leftRef = useRef<HTMLDivElement>(null);
 
     const startResizeLeft = (e: React.MouseEvent) => {
         e.preventDefault();

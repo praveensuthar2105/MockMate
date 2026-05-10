@@ -25,7 +25,7 @@ Return ONLY valid compact JSON (no markdown, no extra text):
   "timeComplexityExpected": "O(...)",
   "spaceComplexityExpected": "O(...)",
   "inputFormat": "one of: int_array, int, string, int_array+int, string+int, int_array+int_array, string_array, string_array+int, matrix, matrix+int, binary_tree, linked_list",
-  "outputFormat": "one of: int, string, boolean, int_array, string_array, binary_tree, linked_list",
+  "outputFormat": "one of: int, string, boolean, int_array, string_array, binary_tree, linked_list, matrix",
   "methodSignature": "methodName only, no params, no types"
 }
 
@@ -36,7 +36,7 @@ CRITICAL RULES FOR testCases:
 - For string: just the string, example: "hello"
 - For string+int: string on line 1, integer on line 2, example: "hello\n3"
 - For matrix: first line = rows cols, then each row, example: "3 3\n1 2 3\n4 5 6\n7 8 9"
-- For binary_tree: space-separated level-order values, null for missing, example: "4 2 7 1 3 6 9"
+- For binary_tree: space-separated level-order values, use the literal string "null" for missing nodes, example: "4 2 7 1 3 6 9"
 - For linked_list: space-separated node values, example: "1 2 3 4 5"
 - expectedOutput must be EXACTLY what stdout should print
 - For int_array output: space-separated (NOT comma-separated), example: "0 1" not "[0, 1]"

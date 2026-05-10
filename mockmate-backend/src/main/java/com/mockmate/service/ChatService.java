@@ -179,7 +179,8 @@ public class ChatService {
                                 "company", company,
                                 "difficulty", difficulty,
                                 "phase", phase.name(),
-                                "duration", String.valueOf(duration)));
+                                "duration", String.valueOf(duration),
+                "candidateName", session.getUser() != null ? String.valueOf(session.getUser().getId()) : "Candidate"));
 
                 // Replace placeholders in phase-specific template
                 String phasePrompt = switch (phase) {

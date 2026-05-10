@@ -2,7 +2,7 @@ import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
+        try (Scanner sc = new Scanner(System.in)) {
         String s = sc.nextLine().trim();
         int n = Integer.parseInt(sc.nextLine().trim());
         Solution sol = new Solution();
@@ -10,8 +10,11 @@ public class Main {
         if (result instanceof Boolean) {
             System.out.println(
                 result.toString().toLowerCase());
-        } else {
+    } else {
             System.out.println(result);
+            }
+        } finally {
+            sc.close();
         }
     }
 }

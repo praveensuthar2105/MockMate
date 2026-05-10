@@ -10,17 +10,26 @@ class TreeNode:
 def build_tree(values):
     if not values or values[0] == 'null':
         return None
-    root = TreeNode(int(values[0]))
+    try:
+        root = TreeNode(int(values[0]))
+    except ValueError:
+        raise ValueError(f"Invalid value at index 0: \'{values[0]}\' — expected integer or \'null\'")
     queue = deque([root])
     i = 1
     while queue and i < len(values):
         node = queue.popleft()
         if i < len(values) and values[i] != 'null':
-            node.left = TreeNode(int(values[i]))
+            try:
+                node.left = TreeNode(int(values[i]))
+            except ValueError:
+                raise ValueError(f"Invalid value at index {i}: \'{values[i]}\' — expected integer or \'null\'")
             queue.append(node.left)
         i += 1
         if i < len(values) and values[i] != 'null':
-            node.right = TreeNode(int(values[i]))
+            try:
+                node.right = TreeNode(int(values[i]))
+            except ValueError:
+                raise ValueError(f"Invalid value at index {i}: \'{values[i]}\' — expected integer or \'null\'")
             queue.append(node.right)
         i += 1
     return root

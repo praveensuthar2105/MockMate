@@ -3,6 +3,12 @@ You are an expert technical interviewer. Analyze the following interview transcr
 Transcript:
 {{transcript}}
 
+
+PARAMETERS GUIDANCE:
+- Phase ({{phase}}): If "phone-screen", focus on broad understanding; if "technical-round", expect deep technical rigor; if "behavioral-round", emphasize soft skills.
+- Difficulty ({{difficulty}}): If "easy", forgive minor mistakes; if "medium", expect solid answers; if "hard", penalize lack of depth and edge cases.
+- Target Company ({{company}}): If a top-tier tech company, apply a stricter rubric and expect highly scalable solutions. Otherwise, standard criteria apply.
+
 Target Company: {{company}}
 Difficulty: {{difficulty}}
 Phase: {{phase}}
@@ -23,3 +29,11 @@ Output a valid JSON object strictly matching this structure:
 }
 
 Do not include any markdown formatting, code blocks, or explanations. Only output the raw JSON string.
+
+
+JSON SCHEMA CONSTRAINTS:
+- "score": must be an integer between 0 and 100.
+- "feedback": must be a non-empty string, max 1000 characters.
+- "strengths": must be an array of strings, minItems: 1, maxItems: 5, non-empty elements.
+- "weaknesses": must be an array of strings, minItems: 1, maxItems: 5, non-empty elements.
+- "recommendations": must be an array of strings, minItems: 1.
