@@ -17,6 +17,8 @@ import org.springframework.data.repository.query.Param;
 public interface InterviewSessionRepository extends JpaRepository<InterviewSession, Long> {
     List<InterviewSession> findByUserId(Long userId);
 
+    List<InterviewSession> findByUserIdAndStatus(Long userId, com.mockmate.model.SessionStatus status);
+
     List<InterviewSession> findByUserIdOrderByStartedAtDesc(Long userId);
 
     Page<InterviewSession> findByUserIdOrderByStartedAtDesc(Long userId, Pageable pageable);

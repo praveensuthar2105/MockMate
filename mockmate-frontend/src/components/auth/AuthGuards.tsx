@@ -10,8 +10,8 @@ export function ProtectedRoute() {
         return <Navigate to="/login" replace />;
     }
 
-    if (user && user.profileComplete === false && !location.pathname.startsWith('/profile')) {
-        console.warn("Please complete your profile first."); // Console notification instead of blocking alert
+    if (user && user.profileComplete === false && location.pathname.startsWith('/interview')) {
+        console.warn("Please complete your profile first.");
         return <Navigate to="/profile" replace />;
     }
 

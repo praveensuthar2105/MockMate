@@ -1,18 +1,30 @@
 import { Check } from 'lucide-react';
+import { useSessionStore } from '../../store/sessionStore';
 
 interface PhaseProgressBarProps {
     currentPhase: string;
 }
 
-const PHASES = [
-    { id: 'RESUME_SCREEN', label: 'Resume' },
-    { id: 'DSA', label: 'DSA' },
-    { id: 'SYSTEM_DESIGN', label: 'System Design' },
-    { id: 'HR', label: 'HR' },
-];
-
 export function PhaseProgressBar({ currentPhase }: PhaseProgressBarProps) {
-    const currentIndex = PHASES.findIndex((p) => p.id === currentPhase);
+    const { currentSession } = useSessionStore();
+    
+    const defaultPhases = [
+        { id: 'RESUME_SCREEN', label: 'Resume' },
+        { id: 'DSA', label: 'DSA' },
+        { id: 'HR', label: 'HR' }
+    ];
+
+    const phases = currentSession?.selectedPhases && currentSession.selectedPhases.length > 0
+        ? currentSession.selectedPhases.map(phaseId => {
+            if (phaseId === 'RESUME_SCREEN') return { id: 'RESUME_SCREEN', label: 'Resume' };
+            if (phaseId === 'DSA') return { id: 'DSA', label: 'DSA' };
+            if (phaseId === 'HR') return { id: 'HR', label: 'HR' };
+            return { id: phaseId, label: phaseId };
+        })
+        : defaultPhases;
+
+    const currentIndex = phases.findIndex((p) => p.id === currentPhase);
+    const validIndex = currentIndex === -1 ? 0 : currentIndex;
 
     return (
         <div className="flex items-center w-full max-w-[500px] justify-between relative px-4">
@@ -23,16 +35,16 @@ export function PhaseProgressBar({ currentPhase }: PhaseProgressBarProps) {
             <div
                 className="absolute top-3 left-8 h-[2px] bg-violet z-0 transition-all duration-500 ease-in-out"
                 style={{
-                    width: currentIndex > 0
-                        ? `calc(${(currentIndex / (PHASES.length - 1)) * 100}% - 2rem)`
+                    width: validIndex > 0
+                        ? `calc(${(validIndex / (phases.length - 1)) * 100}% - 2rem)`
                         : '0%'
                 }}
             />
 
-            {PHASES.map((phase, i) => {
-                const isCompleted = i < currentIndex;
-                const isActive = i === currentIndex;
-                const isFuture = i > currentIndex;
+            {phases.map((phase, i) => {
+                const isCompleted = i < validIndex;
+                const isActive = i === validIndex;
+                const isFuture = i > validIndex;
 
                 return (
                     <div key={phase.id} className="relative z-10 flex flex-col items-center">

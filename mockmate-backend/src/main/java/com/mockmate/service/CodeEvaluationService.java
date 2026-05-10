@@ -15,13 +15,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CodeEvaluationService {
 
-    private final ChatLanguageModel chatLanguageModel;
+    private final Optional<ChatLanguageModel> chatLanguageModel;
     private final CodeSubmissionRepository codeSubmissionRepository;
     private final ObjectMapper objectMapper;
 
@@ -60,7 +61,9 @@ public class CodeEvaluationService {
 
             // Explicit timeout using CompletableFuture
             java.util.concurrent.CompletableFuture<String> future = java.util.concurrent.CompletableFuture
-                    .supplyAsync(() -> chatLanguageModel.chat(request).aiMessage().text());
+                    .supplyAsync(() -> chatLanguageModel.orElseThrow(
+                        () -> new IllegalStateException("Gemini API key is not configured")).chat(request)
+                        .aiMessage().text());
             String response = future.get(45, java.util.concurrent.TimeUnit.SECONDS);
 
             String jsonOnly = extractJson(response);

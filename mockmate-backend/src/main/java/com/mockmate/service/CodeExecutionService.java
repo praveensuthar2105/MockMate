@@ -3,6 +3,7 @@ package com.mockmate.service;
 import com.mockmate.dto.code.ExecutionResult;
 import com.mockmate.dto.code.TestCase;
 import com.mockmate.dto.code.TestCaseResult;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -14,10 +15,13 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class CodeExecutionService {
 
-    public ExecutionResult execute(String language, String code, List<TestCase> testCases, String testRunner) {
+    private final RunnerTemplateService runnerTemplateService;
+
+    public ExecutionResult execute(String language, String code, List<TestCase> testCases, String inputFormat, String outputFormat, String methodSignature) {
         ExecutionResult result = new ExecutionResult();
         result.setCompiled(true);
         result.setResults(new ArrayList<>());
@@ -32,15 +36,11 @@ public class CodeExecutionService {
             tempDir = Files.createTempDirectory("mockmate-exec-");
 
             if ("JAVA".equalsIgnoreCase(language)) {
-                if (testRunner != null && !testRunner.isEmpty()) {
-                    Path solutionFile = tempDir.resolve("Solution.java");
-                    Files.writeString(solutionFile, code);
-                    Path mainFile = tempDir.resolve("Main.java");
-                    Files.writeString(mainFile, testRunner);
-                } else {
-                    Path sourceFile = tempDir.resolve("Main.java");
-                    Files.writeString(sourceFile, code);
-                }
+                // Build combined Main.java (runner + user code in one file)
+                String combinedCode = runnerTemplateService.buildJavaMain(
+                        inputFormat, methodSignature, code);
+                Path mainFile = tempDir.resolve("Main.java");
+                Files.writeString(mainFile, combinedCode);
 
                 String javaHome = System.getProperty("java.home");
                 String os = System.getProperty("os.name").toLowerCase();
@@ -77,12 +77,11 @@ public class CodeExecutionService {
                     return result;
                 }
             } else if ("PYTHON".equalsIgnoreCase(language)) {
-                String finalCode = code;
-                if (testRunner != null && !testRunner.isEmpty()) {
-                    finalCode = code + "\n\n" + testRunner;
-                }
+                // Build combined solution.py (runner + user code in one file)
+                String combinedCode = runnerTemplateService.buildPythonRunner(
+                        inputFormat, methodSignature, code);
                 Path sourceFile = tempDir.resolve("solution.py");
-                Files.writeString(sourceFile, finalCode);
+                Files.writeString(sourceFile, combinedCode);
             } else {
                 result.setCompiled(false);
                 result.setCompileError("Unsupported language: " + language);
@@ -137,8 +136,10 @@ public class CodeExecutionService {
 
             if ("JAVA".equalsIgnoreCase(language)) {
                 command.addAll(List.of("java", "-cp", "/code", "Main"));
-            } else {
+            } else if ("PYTHON".equalsIgnoreCase(language)) {
                 command.addAll(List.of("python3", "/code/solution.py"));
+            } else if ("JAVASCRIPT".equalsIgnoreCase(language) || "JS".equalsIgnoreCase(language)) {
+                command.addAll(List.of("node", "/code/solution.js"));
             }
 
             ProcessBuilder pb = new ProcessBuilder(command);
@@ -215,8 +216,10 @@ public class CodeExecutionService {
                 String exeSuffix = os.contains("win") ? ".exe" : "";
                 String javaPath = javaHome + File.separator + "bin" + File.separator + "java" + exeSuffix;
                 command.addAll(List.of(javaPath, "-cp", tempDir.toAbsolutePath().toString(), "Main"));
-            } else {
+            } else if ("PYTHON".equalsIgnoreCase(language)) {
                 command.addAll(List.of("python", tempDir.resolve("solution.py").toAbsolutePath().toString()));
+            } else if ("JAVASCRIPT".equalsIgnoreCase(language) || "JS".equalsIgnoreCase(language)) {
+                command.addAll(List.of("node", tempDir.resolve("solution.js").toAbsolutePath().toString()));
             }
 
             ProcessBuilder pb = new ProcessBuilder(command);

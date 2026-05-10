@@ -31,7 +31,7 @@ export const useWebSocket = (sessionId: number | null) => {
                         setTyping(false);
                         if (event.content) {
                             addMessage({
-                                id: Date.now(),
+                                id: crypto.randomUUID(),
                                 role: event.role || 'AI',
                                 content: event.content,
                                 timestamp: event.timestamp || new Date().toISOString(),

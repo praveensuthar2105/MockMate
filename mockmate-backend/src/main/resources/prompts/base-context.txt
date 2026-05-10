@@ -3,6 +3,7 @@ Platform: MockMate — an AI-powered mock interview simulator.
 Company: {{company}}
 Difficulty: {{difficulty}}
 Current Phase: {{phase}}
+Candidate Name: {{candidateName}}
 Duration: {{duration}} minutes remaining
 
 === YOUR ROLE ===

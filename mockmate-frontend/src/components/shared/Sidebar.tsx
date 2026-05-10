@@ -1,9 +1,10 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, PlusCircle, History, UserCircle, LogOut } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
 export function Sidebar() {
     const location = useLocation();
+    const navigate = useNavigate();
     const { user, clearAuth } = useAuthStore();
 
     const navItems = [
@@ -15,6 +16,7 @@ export function Sidebar() {
 
     const handleLogout = () => {
         clearAuth();
+        navigate('/login', { replace: true });
     };
 
     return (

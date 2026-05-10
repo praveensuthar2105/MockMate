@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { resumeService } from '../services/resumeService';
 import type { ResumeResponse } from '../services/resumeService';
+import { useAuthStore } from './authStore';
 
 interface ProfileState {
     resume: ResumeResponse | null;
@@ -19,6 +20,8 @@ export const useProfileStore = create<ProfileState>((set) => ({
         try {
             const resume = await resumeService.upload(file);
             set({ resume, loading: false });
+            // Update auth store as well so guards know the profile is complete
+            useAuthStore.getState().updateUser({ profileComplete: true });
         } catch (error: any) {
             set({ error: error.message, loading: false });
         }

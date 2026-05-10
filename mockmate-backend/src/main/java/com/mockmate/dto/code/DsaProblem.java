@@ -18,9 +18,11 @@ public class DsaProblem {
 
     // LeetCode-style templates
     private String javaStarterCode;
-    private String javaTestRunner;
     private String pythonStarterCode;
-    private String pythonTestRunner;
     private String javascriptStarterCode;
-    private String javascriptTestRunner;
+    
+    // Universal Runner config
+    private String methodSignature;
+    private String inputFormat;
+    private String outputFormat;
 }

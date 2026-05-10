@@ -9,11 +9,16 @@ export function CountdownTimer() {
         if (seconds === null || seconds <= 0) return;
 
         const interval = setInterval(() => {
-            setTimeRemaining(seconds - 1);
+            const currentSeconds = useSessionStore.getState().timeRemaining;
+            if (currentSeconds !== null && currentSeconds > 0) {
+                useSessionStore.getState().setTimeRemaining(currentSeconds - 1);
+            } else {
+                clearInterval(interval);
+            }
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [seconds, setTimeRemaining]);
+    }, [seconds === null, seconds <= 0]);
 
     const formatTime = (s: number | null) => {
         if (s === null) return '--:--';

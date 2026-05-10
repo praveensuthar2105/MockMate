@@ -36,14 +36,14 @@ public class HintService {
             throw new IllegalStateException("Hints are only available during the active DSA phase");
         }
 
-        String reportJson = session.getReportJson();
-        if (reportJson == null || reportJson.isEmpty()) {
+        String dsaProblemJson = session.getDsaProblemJson();
+        if (dsaProblemJson == null || dsaProblemJson.isEmpty()) {
             throw new IllegalStateException("No problem found for this session");
         }
 
         DsaProblem problem;
         try {
-            problem = objectMapper.readValue(reportJson, DsaProblem.class);
+            problem = objectMapper.readValue(dsaProblemJson, DsaProblem.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to load DSA problem", e);
         }

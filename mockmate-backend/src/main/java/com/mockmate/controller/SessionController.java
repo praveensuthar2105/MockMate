@@ -59,6 +59,16 @@ public class SessionController {
         return ResponseEntity.ok(interviewService.getSession(id));
     }
 
+    @GetMapping("/{id}/report/pdf")
+    public ResponseEntity<byte[]> getPdfReport(@PathVariable Long id) {
+        byte[] pdfBytes = interviewService.generatePdfReport(id);
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "application/pdf")
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"report-" + id + ".pdf\"")
+                .body(pdfBytes);
+    }
+
     @GetMapping("/me")
     public ResponseEntity<List<InterviewResponse>> getMySessions(
             @AuthenticationPrincipal UserDetails userDetails) {

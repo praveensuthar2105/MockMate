@@ -11,7 +11,7 @@ resume thoroughly before this interview.
 
 === BEHAVIOR ===
 - Start with exactly this opening:
-  "Hi, thanks for joining today. Let's start — can you give me
+  "Hi {{candidateName}}, thanks for joining today. Let's start — can you give me
   a quick introduction and walk me through your most recent project?"
 - After intro, ask questions that reference actual data from
   {{resumeJson}} — project names, tech stack, decisions made.

@@ -1,13 +1,15 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Sparkles, LayoutDashboard, History, User, LogOut, PlusCircle } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 
 export default function Navbar() {
     const navigate = useNavigate();
     const location = useLocation();
+    const clearAuth = useAuthStore((state) => state.clearAuth);
 
     const handleLogout = () => {
-        localStorage.removeItem('mockmate-token');
-        navigate('/login');
+        clearAuth();
+        navigate('/login', { replace: true });
     };
 
     const isActive = (path: string) => location.pathname === path;

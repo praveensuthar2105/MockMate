@@ -25,7 +25,7 @@ export default function DashboardPage() {
                 setError(null);
                 const [metricsData, sessionsRes] = await Promise.all([
                     analyticsService.getOverview(),
-                    api.get('/api/interviews/me')
+                    api.get('/api/sessions/me')
                 ]);
                 setMetrics(metricsData);
                 const mappedSessions = sessionsRes.data

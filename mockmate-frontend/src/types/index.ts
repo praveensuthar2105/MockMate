@@ -50,12 +50,14 @@ export interface InterviewSession {
     messages?: ChatMessage[]
     resumeDurationMins?: number
     dsaDurationMins?: number
-    systemDesignDurationMins?: number
     hrDurationMins?: number
+    reportJson?: string
+    dsaProblemJson?: string
+    selectedPhases?: string[]
 }
 
 export interface ChatMessage {
-    id: number
+    id: string | number
     role: 'USER' | 'AI' | 'SYSTEM'
     content: string
     timestamp: string
@@ -82,11 +84,11 @@ export interface DsaProblem {
     timeComplexityExpected: string
     spaceComplexityExpected: string
     javaStarterCode?: string
-    javaTestRunner?: string
     pythonStarterCode?: string
-    pythonTestRunner?: string
     javascriptStarterCode?: string
-    javascriptTestRunner?: string
+    methodSignature?: string
+    inputFormat?: string
+    outputFormat?: string
 }
 
 export interface ProblemExample {

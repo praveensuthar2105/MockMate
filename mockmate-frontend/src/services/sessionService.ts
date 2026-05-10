@@ -4,26 +4,29 @@ import { mapInterviewResponseToSession } from './sessionMapper';
 
 export const sessionService = {
     createSession: async (jobRole: string, companyName: string, difficulty: string): Promise<InterviewSession> => {
-        void jobRole;
-        const response = await api.post('/api/interviews/start', {
+        const createResponse = await api.post('/api/sessions/create', {
+            jobRole,
             company: companyName,
-            difficulty
+            difficulty,
+            type: 'FULL_MOCK'
         });
-        return mapInterviewResponseToSession(response.data);
+        const sessionId = createResponse.data.id;
+        const startResponse = await api.post(`/api/sessions/${sessionId}/start`);
+        return mapInterviewResponseToSession(startResponse.data);
     },
 
     getSession: async (id: number): Promise<InterviewSession> => {
-        const response = await api.get(`/api/interviews/${id}`);
+        const response = await api.get(`/api/sessions/${id}`);
         return mapInterviewResponseToSession(response.data);
     },
 
     getById: async (id: number): Promise<InterviewSession> => {
-        const response = await api.get(`/api/interviews/${id}`);
+        const response = await api.get(`/api/sessions/${id}`);
         return mapInterviewResponseToSession(response.data);
     },
 
     endSession: async (id: number): Promise<InterviewSession> => {
-        const response = await api.post(`/api/interviews/${id}/end`);
+        const response = await api.post(`/api/sessions/${id}/end`);
         return mapInterviewResponseToSession(response.data);
     }
 };

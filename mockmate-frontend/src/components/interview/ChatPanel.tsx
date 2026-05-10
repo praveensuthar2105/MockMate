@@ -66,26 +66,7 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
 
     const handleTranscriptComplete = (transcript: string) => {
         setInput(transcript);
-        // Auto-send after 1.5s if no edits
-        setTimeout(() => {
-            setInput((current: string) => {
-                if (current === transcript && current.trim()) {
-                    // Trigger manual submit logic
-                    const content = current.trim();
-                    if (content && isConnected) {
-                        addMessage({
-                            id: Date.now(),
-                            role: 'USER',
-                            content,
-                            timestamp: new Date().toISOString(),
-                        });
-                        sendMessage(content);
-                        return '';
-                    }
-                }
-                return current;
-            });
-        }, 1500);
+        // Manual send requested by user: transcript just populates the input field.
     };
 
     const handleSubmit = (e?: React.FormEvent) => {
@@ -95,7 +76,7 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
 
         // Optimistic Update
         addMessage({
-            id: Date.now(),
+            id: crypto.randomUUID(),
             role: 'USER',
             content,
             timestamp: new Date().toISOString(),

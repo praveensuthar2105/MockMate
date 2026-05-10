@@ -18,6 +18,7 @@ interface SessionState {
     addMessage: (message: ChatMessage) => void;
     setTyping: (isTyping: boolean) => void;
     setTimeRemaining: (seconds: number | null) => void;
+    nextPhase: (id: number) => Promise<void>;
     clearSession: () => void;
 }
 
@@ -31,10 +32,17 @@ export const useSessionStore = create<SessionState>((set) => ({
     error: null,
     setTyping: (isTyping) => set({ isTyping }),
     setTimeRemaining: (seconds) => set({ timeRemaining: seconds }),
-    addMessage: (message) => set((state) => ({
-        messages: [...state.messages, message],
-        isTyping: false
-    })),
+    addMessage: (message) => set((state) => {
+        // Prevent duplicate AI messages (e.g. from rapid next phase clicks or STOMP + REST dual delivery)
+        const lastMsg = state.messages[state.messages.length - 1];
+        if (lastMsg && lastMsg.role === message.role && lastMsg.content === message.content) {
+            return { isTyping: false };
+        }
+        return {
+            messages: [...state.messages, message],
+            isTyping: false
+        };
+    }),
     clearSession: () => set({ currentSession: null, messages: [], isTyping: false, timeRemaining: null }),
     updateSession: (update) => set((state) => ({
         currentSession: state.currentSession ? { ...state.currentSession, ...update } : null
@@ -45,9 +53,19 @@ export const useSessionStore = create<SessionState>((set) => ({
     fetchSession: async (id: number) => {
         set({ loading: true, error: null });
         try {
-            const response = await api.get(`/api/interviews/${id}`);
+            const response = await api.get(`/api/sessions/${id}`);
             const session = mapInterviewResponseToSession(response.data);
-            set({ currentSession: session, loading: false });
+            set({ currentSession: session, messages: session.messages || [], loading: false });
+        } catch (error: any) {
+            set({ error: error.message, loading: false });
+        }
+    },
+    nextPhase: async (id: number) => {
+        set({ loading: true, error: null });
+        try {
+            const response = await api.post(`/api/sessions/${id}/phase`);
+            const session = mapInterviewResponseToSession(response.data);
+            set({ currentSession: session, messages: session.messages || [], loading: false });
         } catch (error: any) {
             set({ error: error.message, loading: false });
         }
@@ -55,7 +73,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     fetchRecentSessions: async () => {
         set({ loading: true, error: null });
         try {
-            const response = await api.get('/api/interviews/me');
+            const response = await api.get('/api/sessions/me');
             const sessions = response.data.map(mapInterviewResponseToSession);
             set({ recentSessions: sessions, loading: false });
         } catch (error: any) {

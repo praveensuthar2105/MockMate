@@ -1,6 +1,20 @@
 import { api } from './api';
 import type { ExecutionResult, DsaStatusResponse } from '../types';
 
+const toBackendLanguage = (language: string): string => {
+    const normalized = language.trim().toUpperCase();
+
+    if (normalized === 'JAVA') return 'JAVA';
+    if (normalized === 'PYTHON' || normalized === 'PY') return 'PYTHON';
+    if (normalized === 'JAVASCRIPT' || normalized === 'JS') return 'JAVASCRIPT';
+    if (normalized === 'CPP' || normalized === 'C++') return 'CPP';
+    if (normalized === 'CSHARP' || normalized === 'C#') return 'CSHARP';
+    if (normalized === 'GO') return 'GO';
+    if (normalized === 'RUST') return 'RUST';
+
+    return normalized;
+};
+
 export const codeService = {
     getProblem: async (sessionId: number): Promise<DsaStatusResponse> => {
         try {
@@ -14,7 +28,7 @@ export const codeService = {
         try {
             const response = await api.post('/api/code/run', {
                 sessionId,
-                language: language.toLowerCase(),
+                language: toBackendLanguage(language),
                 code,
                 customInput
             }, {
@@ -29,7 +43,7 @@ export const codeService = {
         try {
             const response = await api.post('/api/code/submit', {
                 sessionId,
-                language: language.toLowerCase(),
+                language: toBackendLanguage(language),
                 code
             }, {
                 timeout: 15000

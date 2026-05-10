@@ -37,7 +37,9 @@ export function MessageBubble({ content, role, timestamp }: MessageBubbleProps) 
                 </div>
 
                 <span className="text-[11px] font-medium text-text-tertiary mt-1 px-1">
-                    {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {timestamp && !isNaN(new Date(timestamp).getTime())
+                        ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : ''}
                 </span>
             </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy } from 'react';
+import { useState, useEffect, lazy, useRef } from 'react';
 import { Play, CheckCircle2, Loader2, Lightbulb } from 'lucide-react';
 import { codeService } from '../../services/codeService';
 import { useInterviewStore } from '../../store/interviewStore';
@@ -31,30 +31,39 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
         submitted: isSubmitted,
         setSubmitted: setIsSubmitted
     } = useInterviewStore();
-    const [leftWidth, setLeftWidth] = useState(35); // percentage
     const [activeTab, setActiveTab] = useState<'output' | 'testcases' | 'evaluation'>('testcases');
     const [customTestCases, setCustomTestCases] = useState<string>('');
-    const [isResizing, setIsResizing] = useState(false);
     const [hintText, setHintText] = useState<string | null>(null);
     const [isLoadingHint, setIsLoadingHint] = useState(false);
 
-    useEffect(() => {
-        if (isResizing) {
-            const handleMouseMove = (e: MouseEvent) => {
-                const newWidth = (e.clientX / window.innerWidth) * 100;
-                if (newWidth > 20 && newWidth < 70) {
-                    setLeftWidth(newWidth);
-                }
-            };
-            const handleMouseUp = () => setIsResizing(false);
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isResizing]);
+    const leftRef = useRef<HTMLDivElement>(null);
+
+    const startResizeLeft = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const leftEl = document.getElementById('dsa-left-panel');
+        const containerEl = document.getElementById('dsa-container');
+        if (!leftEl || !containerEl) return;
+
+        const startWidth = leftEl.getBoundingClientRect().width;
+        const containerWidth = containerEl.getBoundingClientRect().width;
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const deltaX = moveEvent.clientX - startX;
+            const newWidthPercent = ((startWidth + deltaX) / containerWidth) * 100;
+            const clampedWidth = Math.min(Math.max(newWidthPercent, 20), 70);
+            leftEl.style.width = `${clampedWidth}%`;
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+
     const [isFetching, setIsFetching] = useState(false);
 
     useEffect(() => {
@@ -142,12 +151,18 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                 setOutput(res);
                 setActiveTab('output');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Code execution failed:', err);
+            // If we get a 400 with "Coding actions are only available during the active DSA phase", 
+            // it likely means the session ended or phase changed. Trigger a store refresh.
+            if (err.response?.status === 400) {
+                const { fetchSession } = (await import('../../store/sessionStore')).useSessionStore.getState();
+                fetchSession(sessionId);
+            }
             if (!isSubmit) {
                 setOutput({
                     compiled: false,
-                    compileError: 'A network or server error occurred during code execution.',
+                    compileError: err.response?.data?.message || 'A network or server error occurred during code execution.',
                     results: [],
                     passedCount: 0,
                     totalCount: 0,
@@ -174,11 +189,12 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
     }
 
     return (
-        <div className="flex-1 h-full flex flex-row bg-transparent overflow-hidden animate-in fade-in zoom-in-95 duration-500 relative">
+        <div id="dsa-container" className="flex-1 h-full flex flex-row bg-transparent overflow-hidden animate-in fade-in zoom-in-95 duration-500 relative">
 
             {/* Left Column: Problem Description */}
             <div
-                style={{ width: `${leftWidth}%` }}
+                id="dsa-left-panel"
+                style={{ width: `35%` }}
                 className="flex flex-col bg-bg-surface border border-border rounded-xl shadow-sm overflow-hidden min-w-[250px]"
             >
                 <div className="p-5 border-b border-border bg-bg-subtle shrink-0">
@@ -238,8 +254,8 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
 
             {/* Resize Divider */}
             <div
-                onMouseDown={() => setIsResizing(true)}
-                className={`w-1.5 h-full cursor-col-resize hover:bg-violet/30 transition-colors flex items-center justify-center group ${isResizing ? 'bg-violet/50' : ''}`}
+                onMouseDown={startResizeLeft}
+                className="w-1.5 h-full cursor-col-resize hover:bg-violet/30 transition-colors flex items-center justify-center group z-10"
             >
                 <div className="w-0.5 h-8 bg-border group-hover:bg-violet/50 rounded-full" />
             </div>

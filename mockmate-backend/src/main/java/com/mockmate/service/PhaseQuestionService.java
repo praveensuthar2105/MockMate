@@ -21,13 +21,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PhaseQuestionService {
 
-    private final ChatLanguageModel chatLanguageModel;
+    private final Optional<ChatLanguageModel> chatLanguageModel;
     private final ResumeRepository resumeRepository;
     private final ObjectMapper objectMapper;
 
@@ -77,9 +78,9 @@ public class PhaseQuestionService {
 
     private String generateDsaOpener(InterviewSession session) {
         String problemInfo = "a general coding problem";
-        if (session.getReportJson() != null && !session.getReportJson().isEmpty()) {
+        if (session.getDsaProblemJson() != null && !session.getDsaProblemJson().isEmpty()) {
             try {
-                DsaProblem problem = objectMapper.readValue(session.getReportJson(), DsaProblem.class);
+                DsaProblem problem = objectMapper.readValue(session.getDsaProblemJson(), DsaProblem.class);
                 problemInfo = "the following problem: '" + problem.getTitle() + "'\nDescription: "
                         + problem.getDescription();
             } catch (Exception e) {
@@ -101,12 +102,16 @@ public class PhaseQuestionService {
     }
 
     private String callGemini(String systemPrompt, String userPrompt) {
+        if (chatLanguageModel.isEmpty()) {
+            throw new IllegalStateException("Gemini API key is not configured");
+        }
+
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(List.of(
                         SystemMessage.from(systemPrompt),
                         dev.langchain4j.data.message.UserMessage.from(userPrompt)))
                 .build();
-        return chatLanguageModel.chat(chatRequest).aiMessage().text();
+        return chatLanguageModel.orElseThrow().chat(chatRequest).aiMessage().text();
     }
 
     private String buildSystemPrompt(InterviewSession session, String phaseTemplate) {
@@ -119,6 +124,20 @@ public class PhaseQuestionService {
         PhaseType phase = session.getCurrentPhase();
         int duration = getDurationForPhase(session, phase);
 
+        String problemTitle = "a coding problem";
+        String problemContext = "Please present a coding problem related to " + difficulty + " difficulty.";
+
+        if (session.getDsaProblemJson() != null && !session.getDsaProblemJson().isEmpty()) {
+            try {
+                DsaProblem problem = objectMapper.readValue(session.getDsaProblemJson(), DsaProblem.class);
+                problemTitle = problem.getTitle();
+                problemContext = "Title: " + problem.getTitle() + "\nDescription: " + problem.getDescription()
+                        + "\nInput Format: " + problem.getInputFormat() + "\nOutput Format: " + problem.getOutputFormat();
+            } catch (Exception e) {
+                log.warn("Failed to parse DsaProblem for system prompt", e);
+            }
+        }
+
         String baseContext = replacePlaceholders(baseContextTemplate, Map.of(
                 "company", company,
                 "difficulty", difficulty,
@@ -128,7 +147,9 @@ public class PhaseQuestionService {
         String phasePrompt = replacePlaceholders(phaseTemplate, Map.of(
                 "company", company,
                 "difficulty", difficulty,
-                "resumeJson", resumeJson));
+                "resumeJson", resumeJson,
+                "problemTitle", problemTitle,
+                "problemContext", problemContext));
 
         return baseContext + "\n" + phasePrompt;
     }
@@ -158,7 +179,7 @@ public class PhaseQuestionService {
         return switch (phase) {
             case RESUME_SCREEN -> session.getResumeDurationMins();
             case DSA -> session.getDsaDurationMins();
-            case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
+            case SYSTEM_DESIGN -> 0;
             case HR -> session.getHrDurationMins();
         };
     }

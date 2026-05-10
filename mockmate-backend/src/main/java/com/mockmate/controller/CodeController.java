@@ -23,12 +23,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/code")
@@ -46,7 +47,18 @@ public class CodeController {
     @GetMapping("/problem/{sessionId}")
     public ResponseEntity<DsaStatusResponse> getProblem(@PathVariable Long sessionId, Authentication authentication) {
         InterviewSession session = validateSessionOwnershipAndPhase(sessionId, authentication.getName());
-        DsaProblem problem = dsaProblemService.generateProblem(session);
+        
+        if (session.getDsaProblemJson() == null || session.getDsaProblemJson().isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        DsaProblem problem;
+        try {
+            problem = new com.fasterxml.jackson.databind.ObjectMapper().readValue(session.getDsaProblemJson(), DsaProblem.class);
+        } catch (Exception e) {
+            log.error("Failed to parse existing DsaProblem from dsaProblemJson", e);
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR, "Invalid problem data");
+        }
 
         DsaStatusResponse response = new DsaStatusResponse();
 
@@ -87,15 +99,20 @@ public class CodeController {
             Authentication authentication) {
         InterviewSession session = validateSessionOwnershipAndPhase(request.getSessionId(), authentication.getName());
         DsaProblem problem = dsaProblemService.generateProblem(session);
+        if (problem == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to generate or retrieve DSA problem.");
+        }
 
-        List<TestCase> visibleTests = new java.util.ArrayList<>(problem.getExamples().stream()
-                .map(ex -> {
-                    TestCase tc = new TestCase();
-                    tc.setInput(ex.getInput());
-                    tc.setExpectedOutput(ex.getOutput());
-                    tc.setDescription(ex.getExplanation());
-                    return tc;
-                }).toList());
+        List<TestCase> visibleTests = new java.util.ArrayList<>();
+        if (problem.getExamples() != null) {
+            problem.getExamples().stream().forEach(ex -> {
+                TestCase tc = new TestCase();
+                tc.setInput(ex.getInput());
+                tc.setExpectedOutput(ex.getOutput());
+                tc.setDescription(ex.getExplanation());
+                visibleTests.add(tc);
+            });
+        }
 
         if (request.getCustomInput() != null && !request.getCustomInput().isBlank()) {
             TestCase customTc = new TestCase();
@@ -104,9 +121,8 @@ public class CodeController {
             visibleTests.add(0, customTc);
         }
 
-        String testRunner = getTestRunner(request.getLanguage(), problem);
         ExecutionResult result = codeExecutionService.execute(request.getLanguage(), request.getCode(), visibleTests,
-                testRunner);
+                problem.getInputFormat(), problem.getOutputFormat(), problem.getMethodSignature());
 
         // Persist as draft submission so AI interviewer has context
         persistDraftSubmission(session, request.getLanguage(), request.getCode(), result);
@@ -162,13 +178,31 @@ public class CodeController {
         }
 
         DsaProblem problem = dsaProblemService.generateProblem(session);
-        String testRunner = getTestRunner(request.getLanguage().name(), problem);
+        List<TestCase> allTests = new ArrayList<>();
+        if (problem.getTestCases() != null)
+            allTests.addAll(problem.getTestCases());
+
         ExecutionResult executionResult = codeExecutionService.execute(request.getLanguage().name(), request.getCode(),
-                problem.getTestCases(), testRunner);
+                allTests, problem.getInputFormat(), problem.getOutputFormat(), problem.getMethodSignature());
 
         CodeEvaluation evaluation = codeEvaluationService.evaluate(request.getCode(), request.getLanguage().name(),
                 problem,
                 executionResult, activeSubmission);
+
+        activeSubmission.setLanguage(request.getLanguage().name());
+        activeSubmission.setCode(request.getCode());
+        activeSubmission.setSubmitted(true);
+        activeSubmission.setSubmittedAt(java.time.LocalDateTime.now());
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            activeSubmission.setTestResultsJson(mapper.writeValueAsString(executionResult));
+            activeSubmission.setEvaluationJson(mapper.writeValueAsString(evaluation));
+        } catch (Exception e) {
+            log.error("Failed to serialize execution result or evaluation", e);
+        }
+
+        codeSubmissionRepository.save(activeSubmission);
 
         return ResponseEntity.ok(evaluation);
     }
@@ -193,16 +227,6 @@ public class CodeController {
         if (submissions.isEmpty())
             return 0;
         return submissions.get(0).getHintsUsed() != null ? submissions.get(0).getHintsUsed() : 0;
-    }
-
-    private String getTestRunner(String language, DsaProblem problem) {
-        if ("JAVA".equalsIgnoreCase(language))
-            return problem.getJavaTestRunner();
-        if ("PYTHON".equalsIgnoreCase(language))
-            return problem.getPythonTestRunner();
-        if ("JAVASCRIPT".equalsIgnoreCase(language))
-            return problem.getJavascriptTestRunner();
-        return null;
     }
 
     private InterviewSession validateSessionOwnershipAndPhase(Long sessionId, String email) {

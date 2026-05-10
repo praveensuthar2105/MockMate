@@ -20,6 +20,7 @@ public class InterviewRequest {
 
     private Integer resumeDurationMins;
     private Integer dsaDurationMins;
-    private Integer systemDesignDurationMins;
     private Integer hrDurationMins;
+    
+    private java.util.List<String> selectedPhases;
 }

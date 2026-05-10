@@ -10,8 +10,8 @@ export default function SessionConfigPage() {
     // Default duration in minutes
     const [resumeDurationMins, setResumeDurationMins] = useState(5);
     const [dsaDurationMins, setDsaDurationMins] = useState(30);
-    const [systemDesignDurationMins, setSystemDesignDurationMins] = useState(15);
     const [hrDurationMins, setHrDurationMins] = useState(10);
+    const [selectedPhases, setSelectedPhases] = useState<string[]>(['RESUME_SCREEN', 'DSA', 'HR']);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,19 @@ export default function SessionConfigPage() {
 
     const difficulties = ['EASY', 'MEDIUM', 'HARD'];
 
-    const totalDuration = resumeDurationMins + dsaDurationMins + systemDesignDurationMins + hrDurationMins;
+    const totalDuration = (selectedPhases.includes('RESUME_SCREEN') ? resumeDurationMins : 0) +
+                          (selectedPhases.includes('DSA') ? dsaDurationMins : 0) +
+                          (selectedPhases.includes('HR') ? hrDurationMins : 0);
+
+    const togglePhase = (phaseId: string) => {
+        setSelectedPhases(prev => {
+            if (prev.includes(phaseId)) {
+                if (prev.length === 1) return prev; // prevent unselecting the last one
+                return prev.filter(p => p !== phaseId);
+            }
+            return [...prev, phaseId];
+        });
+    };
 
     const handleStart = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -52,8 +64,8 @@ export default function SessionConfigPage() {
                 type: 'FULL_MOCK',
                 resumeDurationMins,
                 dsaDurationMins,
-                systemDesignDurationMins,
-                hrDurationMins
+                hrDurationMins,
+                selectedPhases: ['RESUME_SCREEN', 'DSA', 'HR'].filter(p => selectedPhases.includes(p)) // keep ordered
             });
 
             const sessionId = createRes.data.id;
@@ -122,65 +134,80 @@ export default function SessionConfigPage() {
                         </div>
                     </div>
 
+                    <div className="space-y-3 pt-2">
+                        <label className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Select Rounds</label>
+                        <div className="grid grid-cols-3 gap-3">
+                            {[
+                                { id: 'RESUME_SCREEN', label: 'Resume' },
+                                { id: 'DSA', label: 'DSA' },
+                                { id: 'HR', label: 'HR' }
+                            ].map((round) => (
+                                <button
+                                    key={round.id}
+                                    type="button"
+                                    onClick={() => togglePhase(round.id)}
+                                    className={`py-3 rounded-lg border text-sm font-medium transition-colors flex flex-col items-center justify-center ${selectedPhases.includes(round.id)
+                                        ? 'bg-violet/10 border-violet text-violet shadow-sm'
+                                        : 'bg-bg-page border-border text-text-secondary hover:border-text-tertiary'
+                                        }`}
+                                >
+                                    {round.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="space-y-4 pt-2">
                         <label className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Duration Configuration</label>
 
                         <div className="space-y-4">
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm text-text-primary">Resume</span>
-                                    <span className="text-sm text-text-secondary font-medium">{resumeDurationMins} min</span>
+                            {selectedPhases.includes('RESUME_SCREEN') && (
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-sm text-text-primary">Resume</span>
+                                        <span className="text-sm text-text-secondary font-medium">{resumeDurationMins} min</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="3" max="15"
+                                        value={resumeDurationMins}
+                                        onChange={(e) => setResumeDurationMins(parseInt(e.target.value))}
+                                        className="w-full"
+                                    />
                                 </div>
-                                <input
-                                    type="range"
-                                    min="3" max="15"
-                                    value={resumeDurationMins}
-                                    onChange={(e) => setResumeDurationMins(parseInt(e.target.value))}
-                                    className="w-full"
-                                />
-                            </div>
+                            )}
 
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm text-text-primary">DSA</span>
-                                    <span className="text-sm text-text-secondary font-medium">{dsaDurationMins} min</span>
+                            {selectedPhases.includes('DSA') && (
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-sm text-text-primary">DSA</span>
+                                        <span className="text-sm text-text-secondary font-medium">{dsaDurationMins} min</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="15" max="60"
+                                        value={dsaDurationMins}
+                                        onChange={(e) => setDsaDurationMins(parseInt(e.target.value))}
+                                        className="w-full"
+                                    />
                                 </div>
-                                <input
-                                    type="range"
-                                    min="15" max="60"
-                                    value={dsaDurationMins}
-                                    onChange={(e) => setDsaDurationMins(parseInt(e.target.value))}
-                                    className="w-full"
-                                />
-                            </div>
+                            )}
 
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm text-text-primary">System Design</span>
-                                    <span className="text-sm text-text-secondary font-medium">{systemDesignDurationMins} min</span>
+                            {selectedPhases.includes('HR') && (
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-sm text-text-primary">HR</span>
+                                        <span className="text-sm text-text-secondary font-medium">{hrDurationMins} min</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="5" max="20"
+                                        value={hrDurationMins}
+                                        onChange={(e) => setHrDurationMins(parseInt(e.target.value))}
+                                        className="w-full"
+                                    />
                                 </div>
-                                <input
-                                    type="range"
-                                    min="10" max="30"
-                                    value={systemDesignDurationMins}
-                                    onChange={(e) => setSystemDesignDurationMins(parseInt(e.target.value))}
-                                    className="w-full"
-                                />
-                            </div>
-
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm text-text-primary">HR</span>
-                                    <span className="text-sm text-text-secondary font-medium">{hrDurationMins} min</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="5" max="20"
-                                    value={hrDurationMins}
-                                    onChange={(e) => setHrDurationMins(parseInt(e.target.value))}
-                                    className="w-full"
-                                />
-                            </div>
+                            )}
                         </div>
 
                         <div className="flex justify-between items-center bg-bg-subtle p-4 rounded-lg border border-border mt-4">

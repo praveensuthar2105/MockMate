@@ -26,13 +26,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ChatService {
 
-        private final ChatLanguageModel chatLanguageModel;
+        private final Optional<ChatLanguageModel> chatLanguageModel;
         private final ChatMessageRepository chatMessageRepository;
         private final InterviewSessionRepository sessionRepository;
         private final ResumeRepository resumeRepository;
@@ -129,6 +130,11 @@ public class ChatService {
         }
 
         private String getAiResponse(InterviewSession session, String userMessage) {
+                if (chatLanguageModel.isEmpty()) {
+                        log.warn("Gemini API key is not configured. Running chat in fallback mode.");
+                        return "[MOCK MODE] AI is not configured yet. I can continue the interview with fallback responses. Tell me your approach, and I’ll guide the next step.";
+                }
+
                 String systemPrompt = buildSystemPrompt(session);
 
                 List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
@@ -150,7 +156,7 @@ public class ChatService {
                                 .messages(messages)
                                 .build();
                 try {
-                        var response = chatLanguageModel.chat(chatRequest);
+                        var response = chatLanguageModel.orElseThrow().chat(chatRequest);
                         return response.aiMessage().text();
                 } catch (Exception e) {
                         log.error("AI chat failed: {}", e.getMessage());
@@ -261,7 +267,7 @@ public class ChatService {
                 return switch (phase) {
                         case RESUME_SCREEN -> session.getResumeDurationMins();
                         case DSA -> session.getDsaDurationMins();
-                        case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
+                        case SYSTEM_DESIGN -> 0;
                         case HR -> session.getHrDurationMins();
                 };
         }

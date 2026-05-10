@@ -13,7 +13,7 @@ interface BackendChatResponse {
 export const reportService = {
     getReport: async (sessionId: number): Promise<SessionReport> => {
         const [sessionResponse, chatResponse] = await Promise.all([
-            api.get(`/api/interviews/${sessionId}`),
+            api.get(`/api/sessions/${sessionId}`),
             api.get<BackendChatResponse[]>(`/api/chat/${sessionId}`)
         ]);
 
@@ -41,7 +41,7 @@ export const reportService = {
     },
 
     getHistory: async (): Promise<InterviewSession[]> => {
-        const response = await api.get('/api/interviews/me');
+        const response = await api.get('/api/sessions/me');
         return response.data
             .map(mapInterviewResponseToSession)
             .sort((a: InterviewSession, b: InterviewSession) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
