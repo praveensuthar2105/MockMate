@@ -1,11 +1,17 @@
 import sys
 
-raw_input = sys.stdin.read().strip()
-lines = raw_input.split('\n') if raw_input else []
-words = lines[0].strip().split() if lines else []
+def print_result(result):
+    if isinstance(result, list):
+        print(' '.join(map(str, result)))
+    elif isinstance(result, bool):
+        print(str(result).lower())
+    else:
+        print(result)
 
 {{USER_CODE}}
 
+lines = sys.stdin.read().strip().split('\n')
+words = lines[0].strip().split()
 sol = Solution()
 result = sol.{{methodSignature}}(words)
-print(result)
+print_result(result)

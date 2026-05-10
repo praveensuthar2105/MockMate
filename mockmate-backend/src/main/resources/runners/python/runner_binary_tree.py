@@ -42,17 +42,16 @@ def serialize_tree(root):
         result.pop()
     return ' '.join(result)
 
-raw_input = sys.stdin.read().strip()
-lines = raw_input.split('\n') if raw_input else []
-values = lines[0].strip().split() if lines else []
-root = build_tree(values)
-
 {{USER_CODE}}
 
+lines = sys.stdin.read().strip().split('\n')
+values = lines[0].strip().split()
+root = build_tree(values)
 sol = Solution()
 result = sol.{{methodSignature}}(root)
-
 if isinstance(result, TreeNode):
     print(serialize_tree(result))
+elif isinstance(result, bool):
+    print(str(result).lower())
 else:
     print(result)

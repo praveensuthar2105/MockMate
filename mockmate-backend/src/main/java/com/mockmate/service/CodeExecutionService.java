@@ -72,8 +72,7 @@ public class CodeExecutionService {
                         compileProcess.destroyForcibly();
                     }
                     result.setCompiled(false);
-                    result.setCompileError(
-                            compileOutput.isEmpty() ? "Compilation failed or timed out." : compileOutput);
+                    result.setCompileError(compileOutput.isEmpty() ? "Compilation failed or timed out." : compileOutput.replace("/code/Main.java:", "Line ").replace("Main.java:", "Line "));
                     return result;
                 }
             } else if ("PYTHON".equalsIgnoreCase(language)) {
@@ -106,7 +105,11 @@ public class CodeExecutionService {
         } catch (Exception e) {
             log.error("Execution error", e);
             result.setCompiled(false);
-            result.setCompileError("Execution system error: " + e.getMessage());
+            if (e instanceof java.io.IOException && e.getMessage().contains("docker")) {
+                result.setCompileError("Code execution unavailable. Docker is not running.");
+            } else {
+                result.setCompileError("Execution system error: " + e.getMessage());
+            }
         } finally {
             if (tempDir != null) {
                 deleteDirectory(tempDir.toFile());
@@ -148,7 +151,7 @@ public class CodeExecutionService {
 
             if (testCase.getInput() != null && !testCase.getInput().isEmpty()) {
                 try (java.io.OutputStream out = process.getOutputStream()) {
-                    out.write(testCase.getInput().getBytes());
+                    out.write(testCase.getInput().replace("\\n", "\n").getBytes());
                     out.flush();
                 }
             } else {
@@ -194,7 +197,11 @@ public class CodeExecutionService {
 
         } catch (Exception e) {
             log.error("Failed to run test case", e);
-            result.setError("System error executing test case");
+            if (e instanceof java.io.IOException && e.getMessage() != null && e.getMessage().contains("Cannot run program \"docker\"")) {
+                result.setError("Code execution unavailable. Docker is not running.");
+            } else {
+                result.setError("System error executing test case: " + e.getMessage());
+            }
             result.setPassed(false);
         }
 
@@ -228,7 +235,7 @@ public class CodeExecutionService {
 
             if (testCase.getInput() != null && !testCase.getInput().isEmpty()) {
                 try (java.io.OutputStream out = process.getOutputStream()) {
-                    out.write(testCase.getInput().getBytes());
+                    out.write(testCase.getInput().replace("\\n", "\n").getBytes());
                     out.flush();
                 }
             } else {
@@ -320,8 +327,8 @@ public class CodeExecutionService {
             return java.util.Objects.equals(actual, expected);
         }
 
-        String a = actual.trim();
-        String e = expected.trim();
+        String a = actual.trim().replaceAll("[ \\t]+", " ");
+        String e = expected.trim().replaceAll("[ \\t]+", " ");
 
         if (a.equals(e)) {
             return true;
