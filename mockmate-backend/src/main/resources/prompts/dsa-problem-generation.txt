@@ -24,10 +24,13 @@ Return ONLY valid compact JSON (no markdown, no extra text):
   "difficulty": "{difficulty}",
   "timeComplexityExpected": "O(...)",
   "spaceComplexityExpected": "O(...)",
-  "inputFormat": "one of: int_array, int, string, int_array+int, string+int, int_array+int_array, string_array, string_array+int, matrix, matrix+int, binary_tree, linked_list",
-  "outputFormat": "one of: int, string, boolean, int_array, string_array, binary_tree, linked_list, matrix",
+  "inputFormat": "STRICTLY one of: int, string, int_array, string_array, int_array+int, string+int, int_array+int_array, matrix, matrix+int, matrix+int_array, binary_tree, linked_list",
+  "outputFormat": "STRICTLY one of: int, string, boolean, int_array, string_array, matrix",
   "methodSignature": "methodName only, no params, no types"
 }
+
+CRITICAL: ONLY use the formats listed in inputFormat. If a problem requires a format not listed here, DO NOT generate it. Choose a different problem.
+
 
 CRITICAL RULES FOR testCases:
 - input field must be EXACTLY what stdin receives
@@ -48,3 +51,5 @@ CRITICAL RULES FOR testCases:
   - Example for String s and int k: "string+int"
   - Example for int[] nums and int target: "int_array+int"
   - The number of types in inputFormat MUST match the problem description.
+- CRITICAL: Use "matrix" for 2D arrays (int[][]) and "int_array" for 1D arrays (int[]). Do not use "int_array" if the problem logic requires a 2D grid/matrix.
+

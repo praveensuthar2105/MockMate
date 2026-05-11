@@ -12,9 +12,10 @@ public class Main {
         
         try {
             int[][] matrix = parseNextMatrix();
+            int target = parseNextInt();
 
             Solution sol = new Solution();
-            Object result = sol.{{methodSignature}}(matrix);
+            Object result = sol.{{methodSignature}}(matrix, target);
             printResult(result);
         } catch (Exception e) {
             e.printStackTrace();
@@ -65,6 +66,28 @@ public class Main {
         return -1;
     }
 
+    static int parseNextInt() {
+        int nextEqual = fullInput.indexOf('=', lastPos);
+        int startSearch = (nextEqual != -1) ? nextEqual + 1 : lastPos;
+        
+        int start = -1;
+        for (int i = startSearch; i < fullInput.length(); i++) {
+            char c = fullInput.charAt(i);
+            if (Character.isDigit(c) || c == '-') {
+                start = i;
+                break;
+            }
+        }
+        if (start == -1) return 0;
+        
+        int end = start;
+        while (end < fullInput.length() && (Character.isDigit(fullInput.charAt(end)) || fullInput.charAt(end) == '-')) {
+            end++;
+        }
+        lastPos = end;
+        return Integer.parseInt(fullInput.substring(start, end));
+    }
+
     static int[] parseArrayString(String s) {
         s = s.replace(",", " ").replace("[", "").replace("]", "").trim();
         if (s.isEmpty()) return new int[0];
@@ -81,7 +104,9 @@ public class Main {
     }
 
     static void printResult(Object result) {
-        if (result instanceof int[][]) {
+        if (result instanceof int[]) {
+            System.out.println(Arrays.toString((int[]) result));
+        } else if (result instanceof int[][]) {
             System.out.println(Arrays.deepToString((int[][]) result));
         } else if (result instanceof Boolean) {
             System.out.println(result.toString().toLowerCase());

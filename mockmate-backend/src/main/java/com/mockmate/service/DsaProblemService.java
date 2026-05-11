@@ -47,7 +47,10 @@ public class DsaProblemService {
         }
     }
 
-    public DsaProblem generateProblem(InterviewSession session) {
+    public DsaProblem generateProblem(Long sessionId) {
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+        
         if (session.getDsaProblemJson() != null && !session.getDsaProblemJson().isEmpty()) {
             try {
                 return objectMapper.readValue(session.getDsaProblemJson(), DsaProblem.class);
@@ -60,7 +63,7 @@ public class DsaProblemService {
             log.warn("Gemini API key is not configured. Using fallback DSA problem.");
             String difficulty = session.getDifficulty() != null ? session.getDifficulty().name() : "EASY";
             DsaProblem fallback = getFallbackProblem(difficulty);
-            persistProblem(session, fallback);
+            persistProblem(session.getId(), fallback);
             return fallback;
         }
 
@@ -138,13 +141,15 @@ public class DsaProblemService {
             problem = getFallbackProblem(difficulty);
         }
 
-        persistProblem(session, problem);
+        persistProblem(sessionId, problem);
 
         return problem;
     }
 
     @Transactional
-    public void persistProblem(InterviewSession session, DsaProblem problem) {
+    public void persistProblem(Long sessionId, DsaProblem problem) {
+        InterviewSession session = sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
         try {
             String json = objectMapper.writeValueAsString(problem);
             session.setDsaProblemJson(json);

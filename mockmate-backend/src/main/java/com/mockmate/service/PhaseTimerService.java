@@ -117,7 +117,7 @@ public class PhaseTimerService {
                 session = sessionRepository.saveAndFlush(session);
 
                 if (next == PhaseType.DSA) {
-                    dsaProblemService.generateProblem(session);
+                    dsaProblemService.generateProblem(session.getId());
                 }
 
                 String firstQuestion = phaseQuestionService.generateFirstQuestion(session);

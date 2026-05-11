@@ -15,16 +15,23 @@ import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface InterviewSessionRepository extends JpaRepository<InterviewSession, Long> {
-    List<InterviewSession> findByUserId(Long userId);
+    @Query("SELECT s FROM InterviewSession s JOIN FETCH s.user WHERE s.user.id = :userId")
+    List<InterviewSession> findByUserId(@Param("userId") Long userId);
 
     List<InterviewSession> findByUserIdAndStatus(Long userId, com.mockmate.model.SessionStatus status);
 
-    List<InterviewSession> findByUserIdOrderByStartedAtDesc(Long userId);
+    @Query("SELECT s FROM InterviewSession s JOIN FETCH s.user WHERE s.user.id = :userId ORDER BY s.startedAt DESC")
+    List<InterviewSession> findByUserIdOrderByStartedAtDesc(@Param("userId") Long userId);
 
-    Page<InterviewSession> findByUserIdOrderByStartedAtDesc(Long userId, Pageable pageable);
+    @Query(value = "SELECT s FROM InterviewSession s JOIN FETCH s.user WHERE s.user.id = :userId ORDER BY s.startedAt DESC",
+           countQuery = "SELECT count(s) FROM InterviewSession s WHERE s.user.id = :userId")
+    Page<InterviewSession> findByUserIdOrderByStartedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM InterviewSession s WHERE s.id = :id")
     Optional<InterviewSession> findByIdForUpdate(@Param("id") Long id);
+
+    @Query("SELECT s FROM InterviewSession s JOIN FETCH s.user WHERE s.id = :id")
+    Optional<InterviewSession> findByIdWithUser(@Param("id") Long id);
     List<InterviewSession> findByStatusAndPhaseEndTimeIsNotNull(com.mockmate.model.SessionStatus status);
 }

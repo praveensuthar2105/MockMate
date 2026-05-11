@@ -118,7 +118,7 @@ public class InterviewService {
     @Transactional
     public InterviewResponse startSession(Long sessionId) {
         Objects.requireNonNull(sessionId, "sessionId must not be null");
-        InterviewSession session = sessionRepository.findById(sessionId)
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
         session.setStartedAt(LocalDateTime.now());
@@ -136,7 +136,7 @@ public class InterviewService {
 
         // Pre-generate problem if starting in DSA phase so AI interviewer knows it
         if (saved.getCurrentPhase() == PhaseType.DSA) {
-            dsaProblemService.generateProblem(saved);
+            dsaProblemService.generateProblem(saved.getId());
         }
 
         String firstQuestion = phaseQuestionService.generateFirstQuestion(saved);
@@ -146,7 +146,7 @@ public class InterviewService {
     }
 
     public InterviewResponse getSession(Long sessionId) {
-        return sessionRepository.findById(sessionId)
+        return sessionRepository.findByIdWithUser(sessionId)
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
     }
@@ -164,7 +164,7 @@ public class InterviewService {
 
     @Transactional
     public PhaseType advancePhase(Long sessionId) {
-        InterviewSession session = sessionRepository.findById(sessionId)
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
         if (session.getStatus() == SessionStatus.COMPLETED) {
@@ -175,7 +175,7 @@ public class InterviewService {
         
         // Ensure DSA problem is generated if phase advances to DSA
         if (session.getCurrentPhase() == PhaseType.DSA && (session.getDsaProblemGenerated() == null || !session.getDsaProblemGenerated())) {
-            dsaProblemService.generateProblem(session);
+            dsaProblemService.generateProblem(session.getId());
         }
         
         return session.getCurrentPhase();
@@ -183,7 +183,7 @@ public class InterviewService {
 
     @Transactional
     public InterviewResponse endSession(Long sessionId) {
-        InterviewSession session = sessionRepository.findById(sessionId)
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
         if (session.getStatus() == SessionStatus.COMPLETED) {
@@ -249,7 +249,7 @@ public class InterviewService {
     }
 
     public byte[] generatePdfReport(Long sessionId) {
-        InterviewSession session = sessionRepository.findById(sessionId)
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
         try (org.apache.pdfbox.pdmodel.PDDocument document = new org.apache.pdfbox.pdmodel.PDDocument()) {

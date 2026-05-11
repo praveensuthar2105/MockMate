@@ -2,23 +2,32 @@ import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
-        try (Scanner sc = new Scanner(System.in)) {
-        String[] parts = sc.nextLine().trim().split("\\s+");
-        int[] nums = new int[parts.length];
-            for (int i = 0; i < parts.length; i++) {
-                try {
-                    nums[i] = Integer.parseInt(parts[i]);
-                } catch (NumberFormatException e) {
-                    System.err.println("Invalid integer token: " + parts[i] + " at index " + i);
-                    throw new IllegalArgumentException(e);
-                }
-            }
-        Solution sol = new Solution();
-        Object result = sol.{{methodSignature}}(nums);
-        printResult(result);
+        Scanner sc = new Scanner(System.in);
+        try {
+            String line = sc.hasNextLine() ? sc.nextLine() : "";
+            int[] nums = parseArray(line);
+
+            Solution sol = new Solution();
+            Object result = sol.{{methodSignature}}(nums);
+            printResult(result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
         } finally {
             sc.close();
         }
+    }
+
+    static int[] parseArray(String line) {
+        if (line.contains("=")) line = line.substring(line.indexOf("=") + 1);
+        line = line.replace("[", "").replace("]", "").replace(",", " ").trim();
+        if (line.isEmpty()) return new int[0];
+        String[] parts = line.split("\\s+");
+        int[] res = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            res[i] = Integer.parseInt(parts[i]);
+        }
+        return res;
     }
 
     static void printResult(Object result) {

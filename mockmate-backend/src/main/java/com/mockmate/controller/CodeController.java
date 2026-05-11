@@ -98,7 +98,7 @@ public class CodeController {
     public ResponseEntity<ExecutionResult> runCode(@Valid @RequestBody CodeRunRequest request,
             Authentication authentication) {
         InterviewSession session = validateSessionOwnershipAndPhase(request.getSessionId(), authentication.getName());
-        DsaProblem problem = dsaProblemService.generateProblem(session);
+        DsaProblem problem = dsaProblemService.generateProblem(session.getId());
         if (problem == null) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to generate or retrieve DSA problem.");
         }
@@ -161,53 +161,33 @@ public class CodeController {
     }
 
     @PostMapping("/submit")
-    @Transactional
     public ResponseEntity<CodeEvaluation> submitCode(@Valid @RequestBody CodeSubmitRequest request,
             Authentication authentication) {
         InterviewSession session = validateSessionOwnershipAndPhase(request.getSessionId(), authentication.getName());
 
+        // Check for existing submission before running expensive AI tasks
         List<CodeSubmission> submissions = codeSubmissionRepository
-                .findBySessionIdOrderBySubmittedAtDescForUpdate(session.getId());
-        CodeSubmission activeSubmission;
-        if (!submissions.isEmpty()) {
-            activeSubmission = submissions.get(0);
-            if (Boolean.TRUE.equals(activeSubmission.getSubmitted())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Code already submitted for this session");
-            }
-        } else {
-            activeSubmission = new CodeSubmission();
-            activeSubmission.setSession(session);
-            activeSubmission.setHintsUsed(0);
+                .findBySessionIdOrderBySubmittedAtDesc(session.getId());
+        if (!submissions.isEmpty() && Boolean.TRUE.equals(submissions.get(0).getSubmitted())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Code already submitted for this session");
         }
 
-        DsaProblem problem = dsaProblemService.generateProblem(session);
+        DsaProblem problem = dsaProblemService.generateProblem(session.getId());
         List<TestCase> allTests = new ArrayList<>();
         if (problem.getTestCases() != null)
             allTests.addAll(problem.getTestCases());
 
+        // External tasks - NO DATABASE LOCK HELD
         ExecutionResult executionResult = codeExecutionService.execute(request.getLanguage().name(), request.getCode(),
                 allTests, problem.getInputFormat(), problem.getOutputFormat(), problem.getMethodSignature());
 
+        // AI Evaluation - NO DATABASE LOCK HELD
         CodeEvaluation evaluation = codeEvaluationService.evaluate(request.getCode(), request.getLanguage().name(),
-                problem,
-                executionResult, activeSubmission);
+                problem, executionResult, session.getId());
 
-        activeSubmission.setLanguage(request.getLanguage().name());
-        activeSubmission.setCode(request.getCode());
-        activeSubmission.setSubmitted(true);
-        activeSubmission.setSubmittedAt(java.time.LocalDateTime.now());
-
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            activeSubmission.setTestResultsJson(mapper.writeValueAsString(executionResult));
-            activeSubmission.setEvaluationJson(mapper.writeValueAsString(evaluation));
-        } catch (Exception e) {
-            log.error("Failed to serialize execution result or evaluation", e);
-        }
-
-        codeSubmissionRepository.save(activeSubmission);
-
-        return ResponseEntity.ok(evaluation);
+        // Persistence - DATABASE LOCK HELD ONLY FOR THE SAVE
+        return ResponseEntity.ok(codeEvaluationService.persistEvaluation(request.getCode(),
+                request.getLanguage().name(), executionResult, session.getId(), evaluation));
     }
 
     @PostMapping("/hint")
@@ -233,7 +213,7 @@ public class CodeController {
     }
 
     private InterviewSession validateSessionOwnershipAndPhase(Long sessionId, String email) {
-        InterviewSession session = sessionRepository.findById(sessionId)
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
 
         if (!session.getUser().getEmail().equals(email)) {

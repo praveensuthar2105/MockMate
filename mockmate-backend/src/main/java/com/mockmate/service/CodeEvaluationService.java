@@ -13,6 +13,9 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.mockmate.repository.InterviewSessionRepository;
+import com.mockmate.model.InterviewSession;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,10 +27,11 @@ public class CodeEvaluationService {
 
     private final Optional<ChatLanguageModel> chatLanguageModel;
     private final CodeSubmissionRepository codeSubmissionRepository;
+    private final InterviewSessionRepository sessionRepository;
     private final ObjectMapper objectMapper;
 
     public CodeEvaluation evaluate(String code, String language, DsaProblem problem, ExecutionResult executionResult,
-            CodeSubmission submission) {
+            Long sessionId) {
         String prompt = "You are a senior engineer reviewing a candidate's solution.\n" +
                 "Problem: " + problem.getTitle() + "\n" +
                 "Expected time complexity: " + problem.getTimeComplexityExpected() + "\n" +
@@ -87,11 +91,26 @@ public class CodeEvaluationService {
             evaluation.setImprovements(List.of("Review Big-O analysis manually."));
         }
 
-        return persistEvaluation(code, language, executionResult, submission, evaluation);
+        return evaluation;
     }
 
-    private CodeEvaluation persistEvaluation(String code, String language, ExecutionResult executionResult,
-            CodeSubmission submission, CodeEvaluation evaluation) {
+    @Transactional
+    public CodeEvaluation persistEvaluation(String code, String language, ExecutionResult executionResult,
+            Long sessionId, CodeEvaluation evaluation) {
+        
+        List<CodeSubmission> submissions = codeSubmissionRepository
+                .findBySessionIdOrderBySubmittedAtDescForUpdate(sessionId);
+        
+        CodeSubmission submission;
+        if (!submissions.isEmpty()) {
+            submission = submissions.get(0);
+        } else {
+            submission = new CodeSubmission();
+            InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+            submission.setSession(session);
+            submission.setHintsUsed(0);
+        }
         int clampedScore = evaluation.getOverallScore() == null ? 0 : evaluation.getOverallScore();
         if (clampedScore > 100)
             clampedScore = 100;

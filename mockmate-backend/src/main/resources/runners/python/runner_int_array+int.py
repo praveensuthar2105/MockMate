@@ -1,32 +1,44 @@
 import sys
-
-def print_result(result):
-    if isinstance(result, list):
-        print(' '.join(map(str, result)))
-    elif isinstance(result, bool):
-        print(str(result).lower())
-    else:
-        print(result)
+import re
+import json
 
 {{USER_CODE}}
 
-lines = sys.stdin.read().strip().split('\n')
-if len(lines) < 2:
-    print("Missing lines", file=sys.stderr)
-    sys.exit(1)
-try:
-    nums = list(map(int, lines[0].strip().split()))
-    target = int(lines[1].strip())
-except ValueError:
-    print("Invalid format", file=sys.stderr)
-    sys.exit(1)
-try:
-    sol = Solution()
-    if not hasattr(sol, "{{methodSignature}}"):
-        print("method {{methodSignature}} not found", file=sys.stderr)
+def smart_reader():
+    input_data = sys.stdin.read().strip()
+    
+    # Try JSON parsing first for bracketed input
+    try:
+        # Look for something like [1,2,3] 10
+        match = re.search(r'(\[.*?\])\s*(-?\d+)', input_data, re.DOTALL)
+        if match:
+            nums = json.loads(match.group(1))
+            k = int(match.group(2))
+            return nums, k
+    except:
+        pass
+        
+    # Fallback: Flat tokens
+    tokens = re.findall(r'-?\d+', input_data)
+    if not tokens:
+        return [], 0
+    if len(tokens) == 1:
+        return [], int(tokens[0])
+        
+    # Last token is k, rest is nums
+    k = int(tokens[-1])
+    nums = [int(t) for t in tokens[:-1]]
+    return nums, k
+
+if __name__ == "__main__":
+    try:
+        nums, k = smart_reader()
+        sol = Solution()
+        result = sol.{{methodSignature}}(nums, k)
+        if isinstance(result, bool):
+            print(str(result).lower())
+        else:
+            print(result)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    result = sol.{{methodSignature}}(nums, target)
-except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
-print_result(result)

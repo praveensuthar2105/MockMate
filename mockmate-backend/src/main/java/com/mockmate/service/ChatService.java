@@ -70,7 +70,7 @@ public class ChatService {
         @Transactional
         public ChatResponse processMessage(Long sessionId, String userMessage) {
                 Objects.requireNonNull(sessionId, "sessionId must not be null");
-                InterviewSession session = sessionRepository.findById(sessionId)
+                InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
                 if (session.getStatus() == SessionStatus.COMPLETED) {

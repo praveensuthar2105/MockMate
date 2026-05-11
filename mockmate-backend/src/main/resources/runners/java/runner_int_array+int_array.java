@@ -1,27 +1,63 @@
 import java.util.*;
 
 public class Main {
+    static int lastPos = 0;
+    static String fullInput = "";
+
     public static void main(String[] args) {
-        try (Scanner sc = new Scanner(System.in)) {
-        String line1 = sc.nextLine().trim();
-            String[] p1 = line1.isEmpty() ? new String[0] : line1.split("\\s+");
-            int[] nums1 = new int[p1.length];
-            for (int i = 0; i < p1.length; i++) {
-                nums1[i] = Integer.parseInt(p1[i]);
-            }
-        String line2 = sc.nextLine().trim();
-            String[] p2 = line2.isEmpty() ? new String[0] : line2.split("\\s+");
-            int[] nums2 = new int[p2.length];
-            for (int i = 0; i < p2.length; i++) {
-                nums2[i] = Integer.parseInt(p2[i]);
-            }
-        Solution sol = new Solution();
-        Object result = sol.{{methodSignature}}(
-            nums1, nums2);
-        printResult(result);
+        Scanner sc = new Scanner(System.in);
+        StringBuilder sb = new StringBuilder();
+        while (sc.hasNextLine()) sb.append(sc.nextLine()).append(" ");
+        fullInput = sb.toString();
+
+        try {
+            int[] nums1 = parseNextArray();
+            int[] nums2 = parseNextArray();
+
+            Solution sol = new Solution();
+            Object result = sol.{{methodSignature}}(nums1, nums2);
+            printResult(result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
         } finally {
             sc.close();
         }
+    }
+
+    static int[] parseNextArray() {
+        int start = fullInput.indexOf('[', lastPos);
+        int end = -1;
+        if (start != -1) {
+            end = fullInput.indexOf(']', start);
+        }
+
+        if (start != -1 && end != -1) {
+            String content = fullInput.substring(start + 1, end);
+            lastPos = end + 1;
+            return parseArrayString(content);
+        } else {
+            int comma = fullInput.indexOf(',', lastPos);
+            String segment = (comma != -1) ? fullInput.substring(lastPos, comma) : fullInput.substring(lastPos);
+            lastPos = (comma != -1) ? comma + 1 : fullInput.length();
+            return parseArrayString(segment);
+        }
+    }
+
+    static int[] parseArrayString(String s) {
+        if (s.contains("=")) s = s.substring(s.indexOf("=") + 1);
+        s = s.replace("[", "").replace("]", "").replace(",", " ").trim();
+        if (s.isEmpty()) return new int[0];
+        String[] parts = s.split("\\s+");
+        List<Integer> list = new ArrayList<>();
+        for (String p : parts) {
+            try {
+                list.add(Integer.parseInt(p));
+            } catch (Exception e) {}
+        }
+        int[] res = new int[list.size()];
+        for (int i = 0; i < list.size(); i++) res[i] = list.get(i);
+        return res;
     }
 
     static void printResult(Object result) {

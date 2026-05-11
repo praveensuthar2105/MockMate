@@ -12,9 +12,10 @@ public class Main {
         
         try {
             int[][] matrix = parseNextMatrix();
+            int[] nums = parseNextArray();
 
             Solution sol = new Solution();
-            Object result = sol.{{methodSignature}}(matrix);
+            Object result = sol.{{methodSignature}}(matrix, nums);
             printResult(result);
         } catch (Exception e) {
             e.printStackTrace();
@@ -27,7 +28,6 @@ public class Main {
     static int[][] parseNextMatrix() {
         int start = fullInput.indexOf("[[", lastPos);
         if (start == -1) start = fullInput.indexOf('[', lastPos);
-        
         if (start == -1) return new int[0][0];
 
         int end = findMatchingBracket(fullInput, start);
@@ -44,13 +44,18 @@ public class Main {
             rows.add(parseArrayString(content.substring(rowStart + 1, rowEnd)));
             rowStart = content.indexOf('[', rowEnd);
         }
-
-        if (rows.isEmpty() && !content.trim().isEmpty()) {
-             // Fallback for flat matrix string
-             rows.add(parseArrayString(content));
-        }
-
         return rows.toArray(new int[0][]);
+    }
+
+    static int[] parseNextArray() {
+        int start = fullInput.indexOf('[', lastPos);
+        if (start == -1) return new int[0];
+        int end = fullInput.indexOf(']', start);
+        if (end == -1) return new int[0];
+        
+        String content = fullInput.substring(start + 1, end);
+        lastPos = end + 1;
+        return parseArrayString(content);
     }
 
     static int findMatchingBracket(String s, int start) {
@@ -81,12 +86,12 @@ public class Main {
     }
 
     static void printResult(Object result) {
-        if (result instanceof int[][]) {
+        if (result instanceof int[]) {
+            System.out.println(Arrays.toString((int[]) result));
+        } else if (result instanceof int[][]) {
             System.out.println(Arrays.deepToString((int[][]) result));
         } else if (result instanceof Boolean) {
             System.out.println(result.toString().toLowerCase());
-        } else if (result instanceof List) {
-            System.out.println(result.toString());
         } else {
             System.out.println(result);
         }

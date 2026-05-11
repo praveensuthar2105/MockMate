@@ -36,10 +36,14 @@ public class RunnerTemplateService {
             Map.entry("matrix", "runner_matrix"),
             Map.entry("matrix+int", "runner_matrix+int"),
             Map.entry("matrix, int", "runner_matrix+int"),
+            Map.entry("matrix+int_array", "runner_matrix+int_array"),
+            Map.entry("matrix, int_array", "runner_matrix+int_array"),
             Map.entry("matrix+matrix", "runner_matrix+matrix"),
             Map.entry("matrix, matrix", "runner_matrix+matrix"),
             Map.entry("binary_tree", "runner_binary_tree"),
-            Map.entry("linked_list", "runner_linked_list")
+            Map.entry("linked_list", "runner_linked_list"),
+            Map.entry("int_array+int_array+int", "runner_int_array+int_array+int"),
+            Map.entry("int_array, int_array, int", "runner_int_array+int_array+int")
     );
 
     /**
@@ -47,7 +51,16 @@ public class RunnerTemplateService {
      */
     public String buildJavaMain(String inputFormat, String methodSignature, String userCode) {
         if (methodSignature == null || userCode == null) throw new IllegalArgumentException("methodSignature and userCode cannot be null");
-        String template = loadTemplate("runners/java/", inputFormat, ".java");
+        
+        String finalFormat = inputFormat;
+        // Smart Recovery: If the format is int_array but the code expects a matrix, switch to matrix template
+        if (("int_array+int".equals(inputFormat) || "int_array".equals(inputFormat)) && 
+            (userCode.contains("int[][]") || userCode.contains("Integer[][]"))) {
+            log.info("Smart Recovery: Switching template from {} to matrix equivalent based on user code signature", inputFormat);
+            finalFormat = inputFormat.replace("int_array", "matrix");
+        }
+
+        String template = loadTemplate("runners/java/", finalFormat, ".java");
         return template
                 .replace("{{methodSignature}}", methodSignature)
                 .replace("{{USER_CODE}}", userCode);
@@ -58,7 +71,16 @@ public class RunnerTemplateService {
      */
     public String buildPythonRunner(String inputFormat, String methodSignature, String userCode) {
         if (methodSignature == null || userCode == null) throw new IllegalArgumentException("methodSignature and userCode cannot be null");
-        String template = loadTemplate("runners/python/", inputFormat, ".py");
+        
+        String finalFormat = inputFormat;
+        // Python Smart Recovery: If the code uses List[List[int]], switch to matrix template
+        if (("int_array+int".equals(inputFormat) || "int_array".equals(inputFormat)) && 
+            (userCode.contains("List[List[int]]") || userCode.contains("List[List]"))) {
+            log.info("Smart Recovery (Python): Switching template to matrix equivalent");
+            finalFormat = inputFormat.replace("int_array", "matrix");
+        }
+
+        String template = loadTemplate("runners/python/", finalFormat, ".py");
         return template
                 .replace("{{methodSignature}}", methodSignature)
                 .replace("{{USER_CODE}}", userCode);

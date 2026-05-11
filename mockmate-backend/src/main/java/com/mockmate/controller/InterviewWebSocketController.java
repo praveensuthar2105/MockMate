@@ -123,7 +123,7 @@ public class InterviewWebSocketController {
     }
 
     private InterviewSession validateSessionOwnership(Long sessionId, String username) {
-        InterviewSession session = sessionRepository.findById(sessionId)
+        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
         if (!session.getUser().getEmail().equals(username)) {
             throw new SecurityException("Unauthorized access to session");

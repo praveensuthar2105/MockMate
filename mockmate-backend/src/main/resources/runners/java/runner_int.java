@@ -2,26 +2,30 @@ import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
-        try (Scanner sc = new Scanner(System.in)) {
-        int n = 0;
-            try {
-                n = Integer.parseInt(sc.nextLine().trim());
-            } catch (Exception e) {
-                System.err.println("Invalid int input");
-                System.exit(1);
+        Scanner sc = new Scanner(System.in);
+        try {
+            String line = sc.hasNextLine() ? sc.nextLine() : "0";
+            int n = parseSingleInt(line);
+
+            Solution sol = new Solution();
+            Object result = sol.{{methodSignature}}(n);
+            if (result instanceof Boolean) {
+                System.out.println(result.toString().toLowerCase());
+            } else {
+                System.out.println(result);
             }
-        Solution sol = new Solution();
-        Object result = sol.{{methodSignature}}(n);
-        if (result instanceof Boolean) {
-            System.out.println(
-                result.toString().toLowerCase());
-        } else {
-            System.out.println(result);
-        }
-    }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
         } finally {
             sc.close();
         }
+    }
+
+    static int parseSingleInt(String line) {
+        if (line.contains("=")) line = line.substring(line.indexOf("=") + 1);
+        line = line.replace(",", "").trim();
+        return Integer.parseInt(line);
     }
 }
 
