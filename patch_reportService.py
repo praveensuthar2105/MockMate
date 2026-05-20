@@ -1,4 +1,6 @@
-import { api } from './api';
+import sys
+
+content = """import { api } from './api';
 import type { InterviewSession, PhaseType, SessionReport } from '../types';
 import { mapChatResponseToMessage, mapInterviewResponseToSession } from './sessionMapper';
 
@@ -117,3 +119,7 @@ export const reportService = {
         window.URL.revokeObjectURL(url);
     }
 };
+"""
+
+with open("mockmate-frontend/src/services/reportService.ts", "w") as f:
+    f.write(content)
