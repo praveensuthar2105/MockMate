@@ -9,6 +9,8 @@ interface BackendInterviewResponse {
     phaseEndTime: string | null;
     startedAt: string;
     totalScore: number | null;
+    reportJson?: string;
+    dsaProblemJson?: string;
 }
 
 interface BackendChatResponse {
@@ -32,6 +34,8 @@ export function mapInterviewResponseToSession(response: BackendInterviewResponse
         overallScore: response.totalScore,
         startedAt: response.startedAt,
         endedAt: null,
+        reportJson: response.reportJson,
+        dsaProblemJson: response.dsaProblemJson,
     };
 }
 
