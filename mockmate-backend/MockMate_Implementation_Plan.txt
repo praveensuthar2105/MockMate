@@ -1,0 +1,609 @@
+
+--- Page 1 ---
+MockMate
+ AI Mock Interview System
+ Phase-by-Phase Implementation Plan · Spring Boot + LangChain4j + React
+Phase
+Title
+Duration
+Key Technology
+Phase 1
+Auth + Resume Upload + Basic UI
+Days 1–5
+Spring Boot 3.2
+Phase 2
+AI Interview Agent + Resume Screen 
+Days 6–10
+LangChain4j InterviewAgent
+Phase 3
+WebSocket Real-time + All 4 Intervi
+Days 11–15
+Spring WebSocket + STOMP
+Phase 4
+DSA Coding Round
+Days 16–20
+Docker SDK / ProcessBuilder
+Phase 5
+Voice Input + Output
+Days 21–22
+Web Speech API (SpeechRecognition)
+Phase 6
+Score Report + Dashboard + History
+Days 23–26
+LangChain4j report generation
+Phase 7
+Docker Compose + AWS Deploy + CI/CD
+Days 27–30
+Docker Compose
+ Each phase is independently usable — build it, test it yourself, then move on.
+
+--- Page 2 ---
+PHASE 1
+Auth + Resume Upload + Basic UI
+Days 1–5  ·  The foundation everything else depends on
+GOAL
+By the end of Phase 1 you have a working web app: users can register, log in, upload their resume PDF,
+see it parsed into structured JSON (name, skills, projects), and view a basic dashboard. No interview
+features yet — just the solid base.
+TECH STACK
+Spring Boot 3.2 · Spring Security + JWT · PostgreSQL · LangChain4j + Gemini (parsing only) · Apache
+PDFBox · React 18 + Vite · Tailwind CSS · Axios
+FEATURES + HOW TO IMPLEMENT
+Project bootstrap
+WHAT
+Spring Boot project with all dependencies. PostgreSQL schema. application.yml with dev/prod profiles.
+HOW
+Spring Initializr → Java 21, Spring Boot 3.2.4. Add pom.xml deps. Configure application.yml with DB, JWT, Gemini
+keys as env vars. Run — verify /actuator/health returns UP.
+Database schema
+WHAT
+All tables created upfront: users, resumes, interview_sessions, phase_results, chat_messages, code_submissions.
+HOW
+JPA entities with @Entity. Hibernate ddl-auto=update in dev. PostgreSQL JSONB column on
+resumes.parsed_json. Run app once to auto-generate all tables.
+JWT register + login
+WHAT
+POST /api/auth/register and POST /api/auth/login. Returns access token (7 days) + refresh token (30 days).
+HOW
+JwtService using JJWT 0.12: generateToken(), validateToken(), extractUserId(). JwtAuthFilter extends
+OncePerRequestFilter. SecurityConfig permits /api/auth/** only. BCrypt password encoding.
+
+--- Page 3 ---
+Resume PDF upload
+WHAT
+POST /api/resume/upload accepts multipart PDF up to 5MB. Validates file type. Stores on disk.
+HOW
+ResumeController @PostMapping multipart. Apache PDFBox PDDocument.load() extracts raw text. File saved to
+/uploads/{userId}/resume.pdf. Path stored in DB.
+AI resume parsing
+WHAT
+Gemini reads extracted text and returns structured JSON: name, email, skills[], projects[{name, tech, description}],
+education, summary.
+HOW
+LangChain4j GoogleAiGeminiChatModel bean (temperature=0.1 for structured output). Prompt: 'Extract resume
+data as JSON with fields: name, skills, projects, education, summary. Return only valid JSON.' Store result as
+JSONB in resumes.parsed_json.
+React auth pages
+WHAT
+Login page, Register page, protected route wrapper. JWT stored in localStorage. Axios interceptor attaches Bearer
+token.
+HOW
+Vite + React 18 + TypeScript. React Router v6. Zustand authStore holds token + user. ProtectedRoute component
+checks token, redirects to /login if absent. Axios instance with request interceptor.
+Profile + resume UI
+WHAT
+Profile page: upload resume button, parsed JSON preview (skills chips, projects list). Dashboard skeleton with
+welcome message and stats.
+HOW
+ResumeUpload.tsx: file input → POST /api/resume/upload → show parsed result. ParsedResumePreview.tsx
+renders skills as Tailwind chips, projects as cards. Dashboard.tsx shows name, session count (0 for now).
+FILES TO CREATE
+Backend (Java)
+Frontend (React/TS)
+MockMateApplication.java
+src/main.tsx
+model/User.java
+src/App.tsx
+model/Resume.java
+src/router.tsx
+model/InterviewSession.java
+src/store/authStore.ts
+repository/UserRepository.java
+src/services/api.ts
+repository/ResumeRepository.java
+src/services/authService.ts
+security/JwtService.java
+src/services/resumeService.ts
+security/JwtAuthFilter.java
+src/pages/LoginPage.tsx
+security/UserDetailsServiceImpl.java
+src/pages/RegisterPage.tsx
+security/SecurityConfig.java
+src/pages/DashboardPage.tsx
+
+--- Page 4 ---
+config/AppConfig.java
+src/pages/ProfilePage.tsx
+config/CorsConfig.java
+src/components/auth/LoginForm.tsx
+controller/AuthController.java
+src/components/auth/RegisterForm.tsx
+controller/ResumeController.java
+src/components/resume/ResumeUpload.tsx
+controller/UserController.java
+src/components/resume/ParsedResumePreview.tsx
+service/AuthService.java
+src/components/shared/ProtectedRoute.tsx
+service/ResumeService.java
+src/components/shared/Navbar.tsx
+service/PdfParserService.java
+src/types/index.ts
+service/GeminiParsingService.java
+package.json
+dto/request/RegisterRequest.java
+tailwind.config.ts
+dto/request/LoginRequest.java
+vite.config.ts
+dto/response/AuthResponse.java
+dto/response/ResumeResponse.java
+exception/GlobalExceptionHandler.java
+src/main/resources/application.yml
+PHASE COMPLETE WHEN
+Open browser → register → upload your resume PDF → see your skills and projects extracted
+automatically. All APIs tested in Postman.
+
+--- Page 5 ---
+PHASE 2
+AI Interview Agent + Resume Screen Phase
+Days 6–10  ·  The AI interviewer comes alive
+GOAL
+By end of Phase 2 you can start a real mock interview session. The AI reads your uploaded resume and
+asks 3 targeted questions about your actual projects — with intelligent follow-ups if your answer is vague.
+Text-only chat for now, WebSocket in Phase 3.
+TECH STACK
+LangChain4j InterviewAgent · MessageWindowChatMemory · Gemini 1.5 Flash · Session management
+REST API · React chat UI (polling)
+FEATURES + HOW TO IMPLEMENT
+LangChain4j Gemini config
+WHAT
+Two model beans: high-temp (0.7) for interview conversation, low-temp (0.1) for structured extraction.
+HOW
+AiConfig.java @Configuration. GoogleAiGeminiChatModel bean with @Qualifier('conversational'). Separate bean
+@Qualifier('structured') with temperature=0.1. API key from application.yml env var.
+Interview agent with memory
+WHAT
+LangChain4j agent that remembers the full conversation per session. Refreshing page does not lose context.
+HOW
+InterviewAgent @AiService interface with @SystemMessage. InterviewAgentFactory creates agent per session
+using AiServices.builder(). MessageWindowChatMemory(20) keyed by sessionId. On reload: reconstruct memory
+from chat_messages table.
+Session create + start API
+WHAT
+POST /api/sessions/create with company + difficulty. POST /api/sessions/{id}/start triggers first question.
+HOW
+SessionController + SessionService. On start: load user's parsed resume JSON, inject into system prompt, call
+ResumePhaseService.generateFirstQuestion(). Save question to chat_messages. Return question in response.
+
+--- Page 6 ---
+Resume screen question generator
+WHAT
+Generates 3 questions referencing actual project names and tech from the resume. Never generic questions.
+HOW
+ResumePhaseService. Prompt: 'Given this resume: {resumeJson}, generate 3 interview questions that reference
+specific projects and technologies. Questions must name the actual project.' Check last 5 sessions to avoid
+repeating.
+Follow-up probing logic
+WHAT
+After each answer, agent decides to probe deeper or move on based on answer quality. Max 2 follow-ups per
+question.
+HOW
+POST /api/sessions/{id}/answer. SessionService evaluates answer via LangChain4j: 'Is this answer complete and
+detailed? If not, generate one targeted follow-up. If yes, return NEXT.' followUpCount tracked per question in
+session state.
+Basic chat UI
+WHAT
+Clean chat interface showing AI questions on left, user answers on right. Send button + enter to submit. Loading
+spinner while AI thinks.
+HOW
+InterviewRoom.tsx with ChatPanel.tsx. REST polling every 2s for new messages (WebSocket in Phase 3).
+MessageBubble.tsx with role-based styling. useInterview hook manages session state.
+FILES TO CREATE
+Backend (Java)
+Frontend (React/TS)
+config/AiConfig.java
+src/pages/InterviewRoom.tsx
+agent/InterviewAgent.java
+src/pages/SessionConfigPage.tsx
+agent/InterviewAgentFactory.java
+src/components/interview/ChatPanel.tsx
+agent/SessionMemoryStore.java
+src/components/interview/MessageBubble.tsx
+agent/PromptTemplates.java
+src/components/interview/SessionConfig.tsx
+service/ResumePhaseService.java
+src/hooks/useInterview.ts
+service/SessionService.java
+src/services/sessionService.ts
+controller/SessionController.java
+model/ChatMessage.java
+repository/ChatMessageRepository.java
+dto/request/CreateSessionRequest.java
+dto/request/AnswerRequest.java
+dto/response/SessionResponse.java
+dto/response/ChatMessageResponse.java
+
+--- Page 7 ---
+PHASE COMPLETE WHEN
+Start a session, select Google + Medium difficulty. AI asks: 'In your ATS Resify project, how did you handle
+the latency in the AI response pipeline?' — using your actual project name.
+
+--- Page 8 ---
+PHASE 3
+WebSocket Real-time + All 4 Interview Phases
+Days 11–15  ·  Full interview flow end to end
+GOAL
+Phase 3 upgrades chat from REST polling to WebSocket, adds a server-synced countdown timer per
+phase, and wires up DSA, System Design, and HR question generators. You now have a complete
+4-phase mock interview that flows automatically from start to finish.
+TECH STACK
+Spring WebSocket + STOMP · SimpMessagingTemplate · Spring @Scheduled · LangChain4j (all phase
+services) · STOMP.js (React)
+FEATURES + HOW TO IMPLEMENT
+WebSocket STOMP config
+WHAT
+Real-time bidirectional messaging. JWT auth over WebSocket. Messages arrive instantly — no polling.
+HOW
+WebSocketConfig @Configuration enableWebSocketMessageBroker. Broker /topic, app prefix /app.
+WebSocketAuthInterceptor validates JWT from connection header CONNECT frame. CORS allowed origins from
+config.
+Real-time message streaming
+WHAT
+User sends message → AI processes → response pushed to client instantly. Typing indicator shows while AI
+thinks.
+HOW
+@MessageMapping('/interview/{sessionId}/message') in InterviewWebSocketController.
+SimpMessagingTemplate.convertAndSend('/topic/session/{id}', response). Publish TYPING event first, then real
+response. Save both messages to DB.
+Phase countdown timer
+WHAT
+Each phase has configurable timer visible in UI. Auto-submits at zero. Survives page refresh.
+HOW
+PhaseTimer stored in InterviewSession (phase_end_time column). On reconnect: calculate remaining =
+phase_end_time - now. @Scheduled every second checks expired timers, auto-advances phase. Frontend syncs
+from server on connect.
+
+--- Page 9 ---
+DSA phase question generator
+WHAT
+Generates unique DSA problem per session: description, constraints, sample I/O, expected complexity. Calibrated
+to company difficulty.
+HOW
+DsaPhaseService. Prompt includes company name and difficulty. Checks last 5 sessions to ensure no repeats.
+Returns structured DsaProblem object with title, description, examples[], constraints[], hints[].
+System design phase
+WHAT
+Generates design question with scale requirements. AI probes answers with follow-up technical questions.
+HOW
+SystemDesignPhaseService. Fresher→'Design URL shortener', Mid→'Design notification system for 10M users'.
+Multi-turn: agent asks 'How would you handle cache invalidation?' based on user's specific answer.
+HR phase + phase progression
+WHAT
+3 behavioural questions from resume context. STAR evaluation. Auto-advance after each phase completes.
+HOW
+HrPhaseService generates questions referencing actual resume projects. STAR scoring: checks for
+Situation/Task/Action/Result. POST /api/sessions/{id}/next-phase triggers next question generator and broadcasts
+PHASE_CHANGE WebSocket event.
+FILES TO CREATE
+Backend (Java)
+Frontend (React/TS)
+config/WebSocketConfig.java
+src/hooks/useWebSocket.ts
+security/WebSocketAuthInterceptor.java
+src/components/interview/PhaseProgressBar.tsx
+controller/InterviewWebSocketController.java
+src/components/interview/CountdownTimer.tsx
+service/DsaPhaseService.java
+src/components/interview/TypingIndicator.tsx
+service/SystemDesignPhaseService.java
+service/HrPhaseService.java
+service/PhaseTimerService.java
+model/PhaseResult.java
+repository/PhaseResultRepository.java
+dto/ws/WsMessage.java
+dto/ws/PhaseChangeEvent.java
+PHASE COMPLETE WHEN
+Full 4-phase interview in real-time: resume questions → DSA problem → system design conversation →
+HR questions. Timer ticking each phase. Messages instant. Phase bar advances automatically.
+
+--- Page 10 ---
+PHASE 4
+DSA Coding Round — Monaco Editor + Code Sandbox
+Days 16–20  ·  LeetCode-style coding inside your interview
+GOAL
+Phase 4 adds the most technically impressive feature: a live code editor with isolated Docker execution.
+Users write Java or Python, run against test cases, get hints, and receive a Big-O analysis on submission.
+This single feature makes MockMate stand out from every other portfolio project.
+TECH STACK
+Docker SDK / ProcessBuilder · Monaco Editor (React) · Java + Python sandbox runners · LangChain4j
+code evaluator · Spring Boot code execution API
+FEATURES + HOW TO IMPLEMENT
+Docker code execution sandbox
+WHAT
+Isolated Docker container per execution. 2s timeout. 256MB memory limit. No network access. Prevents infinite
+loops and malicious code.
+HOW
+Dockerfile.sandbox: OpenJDK 21 + Python 3.12, USER nobody, no network. CodeExecutionService uses
+ProcessBuilder to run 'docker run --rm --network none --memory 256m --cpus 0.5 sandbox java Main'. Timeout via
+CompletableFuture.get(2, SECONDS). Kill container on timeout.
+Test case evaluation
+WHAT
+POST /api/code/run runs code against sample test cases, returns pass/fail + stdout per case within 5 seconds.
+HOW
+CodeExecutionService: for each TestCase, inject input via stdin, capture stdout, compare with expected output
+(trimmed). Return ExecutionResult{passed, total, results[], stderr}. POST /api/code/run → immediate response.
+AI code quality evaluation
+WHAT
+On final submit, LangChain4j evaluates correctness, Big-O time/space, naming, edge cases, readability. Returns
+structured score.
+HOW
+POST /api/code/submit locks editor. CodeEvaluationService sends code + problem to Gemini: 'Evaluate this
+solution. Return JSON: {timeComplexity, spaceComplexity, correctness, naming, edgeCases, overall, notes}'.
+Store in code_submissions table.
+
+--- Page 11 ---
+Progressive hints system
+WHAT
+3 hints available. Hint 1=approach, Hint 2=data structure, Hint 3=pseudocode. Each hint deducts 10pts from DSA
+score.
+HOW
+POST /api/code/hint?level={1|2|3}. HintService generates hint via LangChain4j in context of specific problem.
+hintLevel tracked in session. Frontend shows remaining hints badge. Score deduction applied on submit.
+Monaco Editor integration
+WHAT
+VS Code-quality editor in browser. Java + Python syntax highlighting. Dark theme. Code persists on page refresh.
+HOW
+npm install @monaco-editor/react. CodingPanel.tsx: Monaco defaultLanguage='java', theme='vs-dark',
+fontSize=14, minimap disabled. useCodeEditor hook: auto-save to localStorage every 10s. Language toggle
+switches Monaco language mode.
+Problem statement UI
+WHAT
+Problem shown above editor: title, description, constraints, sample I/O. Test results shown below with green/red
+indicators.
+HOW
+ProblemStatement.tsx renders DsaProblem from session. TestCaseResults.tsx: each result shows status icon,
+input, expected, actual output. Run button shows spinner. Submit button confirms then locks editor permanently.
+FILES TO CREATE
+Backend (Java)
+Frontend (React/TS)
+service/CodeExecutionService.java
+src/components/interview/CodingPanel.tsx
+service/CodeEvaluationService.java
+src/components/interview/ProblemStatement.tsx
+service/HintService.java
+src/components/interview/TestCaseResults.tsx
+controller/CodeController.java
+src/components/interview/HintPanel.tsx
+model/CodeSubmission.java
+src/hooks/useCodeEditor.ts
+repository/CodeSubmissionRepository.java
+dto/request/CodeRunRequest.java
+dto/request/CodeSubmitRequest.java
+dto/response/ExecutionResult.java
+dto/response/CodeEvaluation.java
+Dockerfile.sandbox
+PHASE COMPLETE WHEN
+DSA phase starts → problem appears → write Java solution in Monaco Editor → click Run → test cases
+pass/fail → click Hint if stuck → Submit → receive Big-O analysis within 5 seconds.
+
+--- Page 12 ---
+PHASE 5
+Voice Input + Output
+Days 21–22  ·  Speak your answers like a real interview
+GOAL
+Phase 5 adds voice in 2 days with zero backend changes. Browser's native Web Speech API handles both
+input (mic → text) and output (AI reads back). Makes the interview feel significantly more realistic. en-IN
+locale handles Indian English accent.
+TECH STACK
+Web Speech API (SpeechRecognition) · SpeechSynthesis API · React custom hooks · No backend
+changes required
+FEATURES + HOW TO IMPLEMENT
+Voice input — hold to speak
+WHAT
+Mic button in chat UI. Hold to speak → speech transcribed live → released → sent as message. Interim results
+show in real-time as you speak.
+HOW
+useVoiceInput.ts hook: new SpeechRecognition(), interimResults=true, lang='en-IN'. onresult callback: show
+interim in input box. onend: auto-send final transcript. VoiceMicButton.tsx: mousedown/touchstart starts,
+mouseup/touchend stops. Graceful fallback if API unavailable.
+Voice output — AI reads responses
+WHAT
+AI responses read aloud automatically (toggleable). Uses browser SpeechSynthesis. Stops if user starts typing.
+HOW
+useVoiceOutput.ts hook: window.speechSynthesis.speak(utterance). Voice: en-IN if available, else en-US.
+Rate=0.95 (slightly slower than default for clarity). Cancel current speech on new message. Toggle in Navbar
+settings.
+Live transcription display
+WHAT
+While speaking, interim text shown in greyed-out style in input box. Final text shown normally on sentence
+completion.
+HOW
+TranscriptionDisplay.tsx: interim results styled with opacity-50 italic. Final results replace in full. Pulse animation on
+mic button while recording. Character counter updates live.
+
+--- Page 13 ---
+Voice settings + fallback
+WHAT
+Toggle voice on/off in top-right settings. Works in Chrome and Edge. Shows notification in Firefox (not supported).
+HOW
+VoiceSettingsToggle.tsx in Navbar. useVoiceSupport.ts checks 'SpeechRecognition' in window. If unsupported:
+yellow banner 'Voice not supported in this browser — use Chrome.' voiceEnabled stored in Zustand +
+localStorage.
+FILES TO CREATE
+Frontend only — zero backend changes:
+ src/hooks/useVoiceInput.ts
+ src/hooks/useVoiceOutput.ts
+ src/hooks/useVoiceSupport.ts
+ src/components/interview/VoiceMicButton.tsx
+ src/components/interview/TranscriptionDisplay.tsx
+ src/components/shared/VoiceSettingsToggle.tsx
+PHASE COMPLETE WHEN
+Hold mic button, speak your answer, see live transcription, release → answer sent. AI interviewer reads
+next question back to you in voice.
+
+--- Page 14 ---
+PHASE 6
+Score Report + Dashboard + History
+Days 23–26  ·  Track your progress, download your report
+GOAL
+Phase 6 closes the loop: after every session you get a full AI-generated report with overall score,
+per-phase breakdown, strengths, weaknesses, and 3 concrete next steps. The dashboard shows your
+improvement over time. Everything downloadable as PDF.
+TECH STACK
+LangChain4j report generation · Apache PDFBox (PDF export) · Recharts (React charts) · Spring Boot
+analytics API
+FEATURES + HOW TO IMPLEMENT
+Full session report generation
+WHAT
+On session complete: LangChain4j generates overall score (0–100), per-phase scores, 3 strengths, 3 weaknesses,
+3 improvement actions.
+HOW
+ReportService.generateReport(sessionId): collect all phase scores + full chat history + code evaluation. Send to
+Gemini: 'Given this complete interview session, generate a structured report as JSON: {overallScore, phases[],
+strengths[], weaknesses[], nextSteps[]}'. Store as JSONB. Return via GET /api/sessions/{id}/report.
+PDF report download
+WHAT
+GET /api/sessions/{id}/report/pdf generates downloadable PDF with scores, feedback, and chat transcript.
+HOW
+PdfReportGenerator.java using Apache PDFBox or ReportLab-style (PDFBox). Sections: header with MockMate
+logo, overall score ring, phase breakdown table, strengths/weaknesses, next steps, transcript excerpt. Returns
+byte[] with Content-Type application/pdf.
+Analytics API
+WHAT
+GET /api/users/me/analytics: score trend over last 10 sessions, weak areas by category, session count, average
+score.
+HOW
+AnalyticsService: query phase_results grouped by phase_type, average score per type. score trend: last 10
+sessions ordered by date. Return AnalyticsResponse{scoreHistory[], phaseAverages{}, totalSessions, avgScore,
+mostImprovedArea}.
+
+--- Page 15 ---
+Dashboard with charts
+WHAT
+Score trend line chart, radar chart for skill areas, recent sessions list, big Start Interview CTA.
+HOW
+Dashboard.tsx: Recharts LineChart for score trend, RadarChart for phase averages (DSA/System
+Design/Resume/HR). SessionCard for last 3 sessions. StatCard row: total sessions, average score, best score,
+streak days.
+Report page UI
+WHAT
+Overall score ring, per-phase score cards, strengths/weaknesses panels, next steps, conversation replay, PDF
+download button.
+HOW
+ReportPage.tsx: ScoreRing.tsx (SVG circle with score number). PhaseScoreCard per phase. StarsPanel for
+strengths (green) and weaknesses (amber). NextSteps numbered list. ConversationReplay accordion.
+DownloadPDF button calls /report/pdf.
+Session history page
+WHAT
+Table of all past sessions: date, company, score, duration. Click any row to view full report.
+HOW
+HistoryPage.tsx: paginated table with GET /api/sessions/history?page=0&size=10. Columns: date, company,
+difficulty badge, total score, duration, status chip. Row onClick navigates to /session/{id}/report.
+FILES TO CREATE
+Backend (Java)
+Frontend (React/TS)
+service/ReportService.java
+src/pages/ReportPage.tsx
+service/AnalyticsService.java
+src/pages/HistoryPage.tsx
+service/PdfReportGenerator.java
+src/components/dashboard/ScoreRing.tsx
+controller/ReportController.java
+src/components/dashboard/PhaseScoreCard.tsx
+controller/AnalyticsController.java
+src/components/dashboard/ScoreTrendChart.tsx
+dto/response/ReportResponse.java
+src/components/dashboard/SkillRadarChart.tsx
+dto/response/AnalyticsResponse.java
+src/components/dashboard/SessionCard.tsx
+src/components/report/ConversationReplay.tsx
+src/components/report/NextSteps.tsx
+src/services/reportService.ts
+src/services/analyticsService.ts
+PHASE COMPLETE WHEN
+Complete session → report page appears automatically → see overall score with breakdown → download
+PDF → dashboard shows score improving over sessions.
+
+--- Page 16 ---
+PHASE 7
+Docker Compose + AWS Deploy + CI/CD
+Days 27–30  ·  Live URL on your resume
+GOAL
+Phase 7 gets MockMate live on the internet with a real URL, HTTPS, and automatic deployment on every
+GitHub push. This is what turns a portfolio project into a product. The live link goes on your resume and
+LinkedIn.
+TECH STACK
+Docker Compose · AWS EC2 (t3.small) · AWS RDS PostgreSQL · Nginx reverse proxy · Let's Encrypt SSL
+· GitHub Actions CI/CD
+FEATURES + HOW TO IMPLEMENT
+Docker Compose local setup
+WHAT
+Single command: docker-compose up --build starts entire stack. Services: postgres, backend, frontend, chromadb.
+HOW
+docker-compose.yml: 4 services. Backend Dockerfile: multi-stage Maven build + OpenJDK 21 slim. Frontend
+Dockerfile: Node build + Nginx serve. .env.example with all required vars. Health checks ensure postgres ready
+before backend starts.
+Backend Dockerfile
+WHAT
+Multi-stage build: Maven build in stage 1, copy JAR to OpenJDK 21 slim in stage 2. Final image ~200MB.
+HOW
+Stage 1: FROM maven:3.9-eclipse-temurin-21 AS build. COPY pom.xml + src. RUN mvn package -DskipTests.
+Stage 2: FROM eclipse-temurin:21-jre-jammy. COPY --from=build target/*.jar app.jar. ENTRYPOINT java -jar
+app.jar.
+AWS EC2 deployment
+WHAT
+t3.small instance, Ubuntu 22.04. Docker + Compose installed. RDS PostgreSQL for prod DB. Security groups
+configured.
+HOW
+EC2 t3.small (2 vCPU, 2GB). Security group: 80, 443, 22 open. SSH → install Docker. Clone repo. Copy .env with
+prod values. docker-compose -f docker-compose.prod.yml up -d. Use AWS RDS free tier for PostgreSQL.
+
+--- Page 17 ---
+HTTPS with Let's Encrypt
+WHAT
+Free SSL certificate. Nginx proxies HTTPS → backend:8080 and frontend. Auto-renews.
+HOW
+Nginx on EC2 as reverse proxy. Certbot: certbot --nginx -d yourdomain.com. nginx.conf: location /api/ proxy_pass
+http://backend:8080; location / proxy_pass http://frontend:80. Certificate auto-renews via cron.
+GitHub Actions CI/CD
+WHAT
+On every push to main: SSH to EC2, pull latest, rebuild containers. Zero-downtime deploy.
+HOW
+.github/workflows/deploy.yml: trigger on push to main. Steps: SSH using appleboy/ssh-action. Commands: cd
+mockmate && git pull && docker-compose -f docker-compose.prod.yml up --build -d. Store EC2_HOST, EC2_KEY
+as GitHub Secrets.
+Production README
+WHAT
+README that makes a recruiter understand the project in 60 seconds. Tech stack badges, architecture diagram,
+setup instructions, live demo link.
+HOW
+README.md: project title + 1-line description. Badges: Java 21, Spring Boot, React, Docker, AWS. Features list.
+Architecture section. Quick start (3 commands). Screenshots. Live demo link. How it works (LangChain4j flow
+explained simply).
+FILES TO CREATE
+Backend (Java)
+Frontend (React/TS)
+Dockerfile
+frontend/Dockerfile
+docker-compose.yml
+nginx.conf
+docker-compose.prod.yml
+nginx.prod.conf
+.env.example
+Dockerfile.sandbox
+Config / DevOps:
+ .github/workflows/deploy.yml
+ README.md
+ ARCHITECTURE.md
+PHASE COMPLETE WHEN
+Push to GitHub → GitHub Actions auto-deploys → live at https://mockmate.yourdomain.com. Put this URL
+on your resume. Show it live in any interview.
