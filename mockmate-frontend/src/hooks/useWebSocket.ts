@@ -83,6 +83,15 @@ export const useWebSocket = (sessionId: number | null) => {
         }
     }, [sessionId]);
 
+    const sendCodeDraft = useCallback((code: string, language: string) => {
+        if (clientRef.current?.connected && sessionId) {
+            clientRef.current.publish({
+                destination: `/app/interview/${sessionId}/code-draft`,
+                body: JSON.stringify({ code, language }),
+            });
+        }
+    }, [sessionId]);
+
     useEffect(() => {
         if (sessionId) {
             connect();
@@ -92,6 +101,7 @@ export const useWebSocket = (sessionId: number | null) => {
 
     return {
         isConnected,
-        sendMessage
+        sendMessage,
+        sendCodeDraft
     };
 };

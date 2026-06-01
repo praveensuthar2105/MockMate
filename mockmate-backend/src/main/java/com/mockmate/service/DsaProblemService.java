@@ -53,7 +53,9 @@ public class DsaProblemService {
         
         if (session.getDsaProblemJson() != null && !session.getDsaProblemJson().isEmpty()) {
             try {
-                return objectMapper.readValue(session.getDsaProblemJson(), DsaProblem.class);
+                DsaProblem problem = objectMapper.readValue(session.getDsaProblemJson(), DsaProblem.class);
+                sanitizeTestCasesAndExamples(problem);
+                return problem;
             } catch (Exception e) {
                 log.warn("Failed to parse existing DsaProblem from dsaProblemJson", e);
             }
@@ -96,12 +98,7 @@ public class DsaProblemService {
                 log.debug("Gemini response (attempt {}): {}", attempts + 1, response.substring(0, Math.min(200, response.length())));
 
                 problem = objectMapper.readValue(response, DsaProblem.class);
-
-                // Auto-populate examples from testCases if not provided
-                if ((problem.getExamples() == null || problem.getExamples().isEmpty())
-                        && problem.getTestCases() != null && !problem.getTestCases().isEmpty()) {
-                    problem.setExamples(toExamples(problem.getTestCases()));
-                }
+                sanitizeTestCasesAndExamples(problem);
 
                 // Auto-generate starter code from inputFormat/outputFormat/methodSignature
                 generateStarterCode(problem);
@@ -141,6 +138,7 @@ public class DsaProblemService {
             problem = getFallbackProblem(difficulty);
         }
 
+        sanitizeTestCasesAndExamples(problem);
         persistProblem(sessionId, problem);
 
         return problem;
@@ -187,13 +185,9 @@ public class DsaProblemService {
                     createHint(1, "Think about how you can break this problem into smaller subproblems using recursion."),
                     createHint(2, "Use memoization to avoid recomputing results for the same substring."),
                     createHint(3, "Use backtracking: for each prefix that matches a word, recursively solve for the remaining suffix.")));
-            problem.setInputFormat("string, string_array");
-            problem.setOutputFormat("string_array");
+            problem.setInputFormat("First line contains the string s. Second line contains comma-separated words representing the dictionary wordDict.");
+            problem.setOutputFormat("Print all possible sentences where each word is a valid dictionary word, one per line. If no sentence is possible, print nothing.");
             problem.setMethodSignature("wordBreak");
-            problem.setJavaStarterCode(
-                    "class Solution {\n    public List<String> wordBreak(String s, List<String> wordDict) {\n        \n    }\n}");
-            problem.setPythonStarterCode(
-                    "class Solution:\n    def wordBreak(self, s: str, wordDict: List[str]) -> List[str]:\n        pass");
         } else if ("MEDIUM".equalsIgnoreCase(difficulty)) {
             problem.setTitle("Longest Substring Without Repeating Characters");
             problem.setDescription(
@@ -212,13 +206,9 @@ public class DsaProblemService {
                     createHint(1, "Consider using a sliding window approach with two pointers."),
                     createHint(2, "Use a HashSet or HashMap to track characters in the current window."),
                     createHint(3, "When a duplicate is found, shrink the window from the left until the duplicate is removed.")));
-            problem.setInputFormat("string");
-            problem.setOutputFormat("int");
+            problem.setInputFormat("A single line containing the string s.");
+            problem.setOutputFormat("Print a single integer representing the length of the longest substring without repeating characters.");
             problem.setMethodSignature("lengthOfLongestSubstring");
-            problem.setJavaStarterCode(
-                    "class Solution {\n    public int lengthOfLongestSubstring(String s) {\n        \n    }\n}");
-            problem.setPythonStarterCode(
-                    "class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        pass");
         } else {
             problem.setTitle("Two Sum");
             problem.setDescription(
@@ -239,15 +229,12 @@ public class DsaProblemService {
                     createHint(1, "A brute force approach uses two nested loops — can you do better?"),
                     createHint(2, "Use a HashMap to store each number's complement as you iterate."),
                     createHint(3, "For each element, check if (target - nums[i]) already exists in the map.")));
-            problem.setInputFormat("int_array+int");
-            problem.setOutputFormat("int_array");
+            problem.setInputFormat("First line contains space-separated integers representing the nums array. Second line contains a single integer representing the target.");
+            problem.setOutputFormat("Print two space-separated integers representing the indices of the two numbers.");
             problem.setMethodSignature("twoSum");
-            problem.setJavaStarterCode(
-                    "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}");
-            problem.setPythonStarterCode(
-                    "class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass");
         }
 
+        generateStarterCode(problem);
         return problem;
     }
 
@@ -276,95 +263,15 @@ public class DsaProblemService {
     }
 
     /**
-     * Auto-generates starter code for Java, Python, and JavaScript from inputFormat/outputFormat/methodSignature.
+     * Auto-generates starter code for Java, Python, and JavaScript for Mock Interview (Scanner/stdin/stdout) format.
      */
     private void generateStarterCode(DsaProblem problem) {
-        String method = problem.getMethodSignature();
-        String input = problem.getInputFormat();
-        String output = problem.getOutputFormat();
-        if (method == null || input == null || output == null) return;
-
-        // Only generate if not already present
-        if (problem.getJavaStarterCode() != null && !problem.getJavaStarterCode().isBlank()) return;
-
-        String javaReturn = mapToJavaType(output);
-        String pyReturn = mapToPythonType(output);
-
-        // Parse input params
-        String[] inputParts = input.split("[,+]\\s*");
-        StringBuilder javaParams = new StringBuilder();
-        StringBuilder pyParams = new StringBuilder();
-        String[] paramNames = {"nums", "s", "target", "head", "root", "matrix", "arr", "val", "k", "n"};
-
-        for (int i = 0; i < inputParts.length; i++) {
-            String paramName = i < paramNames.length ? paramNames[i] : "arg" + i;
-            // Use contextual naming based on type
-            String part = inputParts[i].toLowerCase().trim();
-            switch (part) {
-                case "int_array": paramName = "nums"; break;
-                case "string": paramName = (i == 0) ? "s" : "t"; break;
-                case "int": 
-                    if (i == 0) paramName = "n";
-                    else if (method.toLowerCase().contains("k") || inputParts.length > 1 && i == 1) paramName = "k";
-                    else paramName = "target";
-                    break;
-                case "binary_tree": paramName = (i == 0) ? "root" : "root" + (i + 1); break;
-                case "linked_list": paramName = (i == 0) ? "head" : "head" + (i + 1); break;
-                case "matrix": paramName = "matrix"; break;
-                case "string_array": paramName = "words"; break;
-            }
-
-            if (i > 0) { javaParams.append(", "); pyParams.append(", "); }
-            javaParams.append(mapToJavaType(part)).append(" ").append(paramName);
-            pyParams.append(paramName).append(": ").append(mapToPythonType(part));
-        }
-
         problem.setJavaStarterCode(
-                "class Solution {\n    public " + javaReturn + " " + method + "(" + javaParams + ") {\n        \n    }\n}");
+                "import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n        \n    }\n}");
         problem.setPythonStarterCode(
-                "class Solution:\n    def " + method + "(self, " + pyParams + ") -> " + pyReturn + ":\n        pass");
+                "import sys\n\ndef main():\n    # Write your solution here\n    pass\n\nif __name__ == '__main__':\n    main()");
         problem.setJavascriptStarterCode(
-                "class Solution {\n    " + method + "(" + String.join(", ",
-                java.util.Arrays.stream(inputParts).map(p -> {
-                    switch (p.trim()) {
-                        case "int_array": return "nums";
-                        case "string": return "s";
-                        case "int": return "target";
-                        case "binary_tree": return "root";
-                        case "linked_list": return "head";
-                        default: return "arg";
-                    }
-                }).toArray(String[]::new)) + ") {\n        \n    }\n}");
-    }
-
-    private String mapToJavaType(String format) {
-        if (format == null) return "Object";
-        switch (format.toLowerCase().trim()) {
-            case "int": return "int";
-            case "int_array": return "int[]";
-            case "string": return "String";
-            case "string_array": return "String[]";
-            case "boolean": return "boolean";
-            case "binary_tree": return "TreeNode";
-            case "linked_list": return "ListNode";
-            case "matrix": return "int[][]";
-            default: return "Object";
-        }
-    }
-
-    private String mapToPythonType(String format) {
-        if (format == null) return "Any";
-        switch (format.toLowerCase().trim()) {
-            case "int": return "int";
-            case "int_array": return "List[int]";
-            case "string": return "str";
-            case "string_array": return "List[str]";
-            case "boolean": return "bool";
-            case "binary_tree": return "Optional[TreeNode]";
-            case "linked_list": return "Optional[ListNode]";
-            case "matrix": return "List[List[int]]";
-            default: return "Any";
-        }
+                "const fs = require('fs');\n\nfunction main() {\n    const input = fs.readFileSync(0, 'utf-8');\n    // Write your solution here\n    \n}\n\nmain();");
     }
 
     /**
@@ -424,5 +331,18 @@ public class DsaProblemService {
         String repaired = sb.toString();
         log.debug("JSON repair applied: added {} closing characters", repaired.length() - json.length());
         return repaired;
+    }
+
+    private void sanitizeTestCasesAndExamples(DsaProblem problem) {
+        if (problem != null && problem.getTestCases() != null) {
+            for (int i = 0; i < problem.getTestCases().size(); i++) {
+                problem.getTestCases().get(i).setHidden(i >= 3);
+            }
+            // Enforce that examples only contains the first 3 visible test cases
+            List<TestCase> visibleCases = problem.getTestCases().stream()
+                    .filter(tc -> !tc.isHidden())
+                    .toList();
+            problem.setExamples(toExamples(visibleCases));
+        }
     }
 }

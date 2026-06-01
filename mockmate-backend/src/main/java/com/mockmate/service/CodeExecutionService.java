@@ -3,7 +3,6 @@ package com.mockmate.service;
 import com.mockmate.dto.code.ExecutionResult;
 import com.mockmate.dto.code.TestCase;
 import com.mockmate.dto.code.TestCaseResult;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -15,11 +14,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class CodeExecutionService {
-
-    private final RunnerTemplateService runnerTemplateService;
 
     public ExecutionResult execute(String language, String code, List<TestCase> testCases, String inputFormat, String outputFormat, String methodSignature) {
         ExecutionResult result = new ExecutionResult();
@@ -36,11 +32,8 @@ public class CodeExecutionService {
             tempDir = Files.createTempDirectory("mockmate-exec-");
 
             if ("JAVA".equalsIgnoreCase(language)) {
-                // Build combined Main.java (runner + user code in one file)
-                String combinedCode = runnerTemplateService.buildJavaMain(
-                        inputFormat, methodSignature, code);
                 Path mainFile = tempDir.resolve("Main.java");
-                Files.writeString(mainFile, combinedCode);
+                Files.writeString(mainFile, code);
 
                 String javaHome = System.getProperty("java.home");
                 String os = System.getProperty("os.name").toLowerCase();
@@ -76,11 +69,11 @@ public class CodeExecutionService {
                     return result;
                 }
             } else if ("PYTHON".equalsIgnoreCase(language)) {
-                // Build combined solution.py (runner + user code in one file)
-                String combinedCode = runnerTemplateService.buildPythonRunner(
-                        inputFormat, methodSignature, code);
                 Path sourceFile = tempDir.resolve("solution.py");
-                Files.writeString(sourceFile, combinedCode);
+                Files.writeString(sourceFile, code);
+            } else if ("JAVASCRIPT".equalsIgnoreCase(language) || "JS".equalsIgnoreCase(language)) {
+                Path sourceFile = tempDir.resolve("solution.js");
+                Files.writeString(sourceFile, code);
             } else {
                 result.setCompiled(false);
                 result.setCompileError("Unsupported language: " + language);
@@ -123,6 +116,7 @@ public class CodeExecutionService {
         TestCaseResult result = new TestCaseResult();
         result.setInput(testCase.getInput());
         result.setExpectedOutput(testCase.getExpectedOutput());
+        result.setHidden(testCase.isHidden());
         long startTime = System.currentTimeMillis();
 
         try {
@@ -145,27 +139,17 @@ public class CodeExecutionService {
                 command.addAll(List.of("node", "/code/solution.js"));
             }
 
+            Path inputPath = tempDir.resolve("input.txt");
+            String rawInput = testCase.getInput() != null ? testCase.getInput() : "";
+            Files.writeString(inputPath, rawInput.replace("\\n", "\n"));
+
+            Path outputPath = tempDir.resolve("out.txt");
+
             ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectInput(inputPath.toFile());
+            pb.redirectOutput(outputPath.toFile());
             pb.redirectErrorStream(true);
             Process process = pb.start();
-
-            if (testCase.getInput() != null && !testCase.getInput().isEmpty()) {
-                try (java.io.OutputStream out = process.getOutputStream()) {
-                    out.write(testCase.getInput().replace("\\n", "\n").getBytes());
-                    out.flush();
-                }
-            } else {
-                process.getOutputStream().close();
-            }
-
-            java.util.concurrent.CompletableFuture<String> outputFuture = java.util.concurrent.CompletableFuture
-                    .supplyAsync(() -> {
-                        try {
-                            return new String(process.getInputStream().readAllBytes());
-                        } catch (Exception e) {
-                            return "";
-                        }
-                    });
 
             boolean finished = process.waitFor(2, TimeUnit.SECONDS);
             long executionTimeMs = System.currentTimeMillis() - startTime;
@@ -173,34 +157,35 @@ public class CodeExecutionService {
 
             if (!finished) {
                 process.destroyForcibly();
-            }
-            String output = outputFuture.get().trim();
-
-            if (!finished) {
                 result.setTimedOut(true);
                 result.setError("Time Limit Exceeded");
+                result.setStatus("Time Limit Exceeded");
                 result.setPassed(false);
                 return result;
             }
 
+            String output = Files.readString(outputPath).trim();
             int exitCode = process.exitValue();
             result.setActualOutput(output);
 
-            String expectedTrimmed = testCase.getExpectedOutput() != null ? testCase.getExpectedOutput().trim() : "";
-
             if (exitCode != 0) {
                 result.setError(output);
+                result.setStatus("Runtime Error");
                 result.setPassed(false);
             } else {
-                result.setPassed(compareOutputs(output, expectedTrimmed));
+                boolean matched = compareOutputs(output, testCase.getExpectedOutput());
+                result.setPassed(matched);
+                result.setStatus(matched ? "Accepted" : "Wrong Answer");
             }
 
         } catch (Exception e) {
             log.error("Failed to run test case", e);
             if (e instanceof java.io.IOException && e.getMessage() != null && e.getMessage().contains("Cannot run program \"docker\"")) {
                 result.setError("Code execution unavailable. Docker is not running.");
+                result.setStatus("Runtime Error");
             } else {
                 result.setError("System error executing test case: " + e.getMessage());
+                result.setStatus("Runtime Error");
             }
             result.setPassed(false);
         }
@@ -212,12 +197,12 @@ public class CodeExecutionService {
         TestCaseResult result = new TestCaseResult();
         result.setInput(testCase.getInput());
         result.setExpectedOutput(testCase.getExpectedOutput());
+        result.setHidden(testCase.isHidden());
         long startTime = System.currentTimeMillis();
 
         try {
             List<String> command = new ArrayList<>();
             if ("JAVA".equalsIgnoreCase(language)) {
-                // Use current java bin
                 String javaHome = System.getProperty("java.home");
                 String os = System.getProperty("os.name").toLowerCase();
                 String exeSuffix = os.contains("win") ? ".exe" : "";
@@ -229,27 +214,17 @@ public class CodeExecutionService {
                 command.addAll(List.of("node", tempDir.resolve("solution.js").toAbsolutePath().toString()));
             }
 
+            Path inputPath = tempDir.resolve("input.txt");
+            String rawInput = testCase.getInput() != null ? testCase.getInput() : "";
+            Files.writeString(inputPath, rawInput.replace("\\n", "\n"));
+
+            Path outputPath = tempDir.resolve("out.txt");
+
             ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectInput(inputPath.toFile());
+            pb.redirectOutput(outputPath.toFile());
             pb.redirectErrorStream(true);
             Process process = pb.start();
-
-            if (testCase.getInput() != null && !testCase.getInput().isEmpty()) {
-                try (java.io.OutputStream out = process.getOutputStream()) {
-                    out.write(testCase.getInput().replace("\\n", "\n").getBytes());
-                    out.flush();
-                }
-            } else {
-                process.getOutputStream().close();
-            }
-
-            java.util.concurrent.CompletableFuture<String> outputFuture = java.util.concurrent.CompletableFuture
-                    .supplyAsync(() -> {
-                        try {
-                            return new String(process.getInputStream().readAllBytes());
-                        } catch (Exception e) {
-                            return "";
-                        }
-                    });
 
             boolean finished = process.waitFor(2, TimeUnit.SECONDS);
             long executionTimeMs = System.currentTimeMillis() - startTime;
@@ -259,26 +234,29 @@ public class CodeExecutionService {
                 process.destroyForcibly();
                 result.setTimedOut(true);
                 result.setError("Time Limit Exceeded (Local)");
+                result.setStatus("Time Limit Exceeded");
                 result.setPassed(false);
                 return result;
             }
 
-            String output = outputFuture.get().trim();
+            String output = Files.readString(outputPath).trim();
             int exitCode = process.exitValue();
             result.setActualOutput(output);
 
-            String expectedTrimmed = testCase.getExpectedOutput() != null ? testCase.getExpectedOutput().trim() : "";
-
             if (exitCode != 0) {
                 result.setError(output);
+                result.setStatus("Runtime Error");
                 result.setPassed(false);
             } else {
-                result.setPassed(compareOutputs(output, expectedTrimmed));
+                boolean matched = compareOutputs(output, testCase.getExpectedOutput());
+                result.setPassed(matched);
+                result.setStatus(matched ? "Accepted" : "Wrong Answer");
             }
 
         } catch (Exception e) {
             log.error("Failed to run local test case", e);
             result.setError("Local system error: " + e.getMessage());
+            result.setStatus("Runtime Error");
             result.setPassed(false);
         }
 
@@ -323,43 +301,33 @@ public class CodeExecutionService {
     }
 
     private boolean compareOutputs(String actual, String expected) {
-        if (actual == null || expected == null) {
-            return java.util.Objects.equals(actual, expected);
+        String normActual = normalizeOutput(actual);
+        String normExpected = normalizeOutput(expected);
+        return normActual.equals(normExpected);
+    }
+
+    private String normalizeOutput(String val) {
+        if (val == null) {
+            return "";
+        }
+        String normalized = val.replace("\r\n", "\n").replace("\r", "\n");
+        String[] lines = normalized.split("\n", -1);
+        List<String> cleanedLines = new ArrayList<>();
+        for (String line : lines) {
+            cleanedLines.add(line.stripTrailing());
+        }
+        int lastNonEmptyIndex = cleanedLines.size() - 1;
+        while (lastNonEmptyIndex >= 0 && cleanedLines.get(lastNonEmptyIndex).isEmpty()) {
+            lastNonEmptyIndex--;
         }
 
-        String a = actual.trim().replaceAll("[ \\t]+", " ");
-        String e = expected.trim().replaceAll("[ \\t]+", " ");
-
-        if (a.equals(e)) {
-            return true;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i <= lastNonEmptyIndex; i++) {
+            sb.append(cleanedLines.get(i));
+            if (i < lastNonEmptyIndex) {
+                sb.append("\n");
+            }
         }
-
-        // Handle multi-line results where order might not matter (e.g. Word Break II)
-        String[] aLines = a.split("\\r?\\n");
-        String[] eLines = e.split("\\r?\\n");
-
-        if (aLines.length != eLines.length) {
-            return false;
-        }
-
-        if (aLines.length <= 1) {
-            return false; // Single line didn't match via strict equals above
-        }
-
-        List<String> aList = new ArrayList<>();
-        for (String s : aLines) {
-            if (!s.trim().isEmpty())
-                aList.add(s.trim());
-        }
-        java.util.Collections.sort(aList);
-
-        List<String> eList = new ArrayList<>();
-        for (String s : eLines) {
-            if (!s.trim().isEmpty())
-                eList.add(s.trim());
-        }
-        java.util.Collections.sort(eList);
-
-        return aList.equals(eList);
+        return sb.toString();
     }
 }

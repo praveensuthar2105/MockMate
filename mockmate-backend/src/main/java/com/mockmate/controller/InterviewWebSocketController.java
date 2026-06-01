@@ -122,6 +122,36 @@ public class InterviewWebSocketController {
         }
     }
 
+    @MessageMapping("/interview/{sessionId}/code-draft")
+    public void handleCodeDraft(
+            @DestinationVariable Long sessionId,
+            @Payload java.util.Map<String, String> payload,
+            Principal principal) {
+
+        if (principal == null) {
+            log.error("Principal is null — user is not authenticated for code-draft");
+            return;
+        }
+
+        // Validate session ownership
+        InterviewSession session = validateSessionOwnership(sessionId, principal.getName());
+        if (session.getCurrentPhase() != PhaseType.DSA || !"IN_PROGRESS".equals(session.getStatus().name())) {
+            return;
+        }
+
+        String code = payload.get("code");
+        String language = payload.get("language");
+        if (code == null) {
+            return;
+        }
+
+        // Persist code draft in database
+        chatService.persistDraftSubmission(session.getId(), language, code);
+
+        // Run background AI analysis
+        chatService.triggerAsyncCodeDraftFeedback(session.getId(), code, language);
+    }
+
     private InterviewSession validateSessionOwnership(Long sessionId, String username) {
         InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));

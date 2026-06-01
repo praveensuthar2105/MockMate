@@ -2,6 +2,7 @@ import { useState, useEffect, lazy } from 'react';
 import { Play, CheckCircle2, Loader2, Lightbulb } from 'lucide-react';
 import { codeService } from '../../services/codeService';
 import { useInterviewStore } from '../../store/interviewStore';
+import { useWebSocket } from '../../hooks/useWebSocket';
 import type { DsaProblem } from '../../types';
 
 const Editor = lazy(() => import('@monaco-editor/react'));
@@ -64,7 +65,18 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
         document.addEventListener('mouseup', handleMouseUp);
     };
 
+    const { sendCodeDraft } = useWebSocket(sessionId);
     const [isFetching, setIsFetching] = useState(false);
+
+    useEffect(() => {
+        if (!code || isSubmitted) return;
+
+        const timer = setTimeout(() => {
+            sendCodeDraft(code, language);
+        }, 30000); // 30 seconds debounce to send code drafts passively
+
+        return () => clearTimeout(timer);
+    }, [code, language, isSubmitted, sendCodeDraft]);
 
     useEffect(() => {
         if (!problem && sessionId) {
@@ -99,8 +111,18 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
     }, [sessionId, problem]);
 
     const getDefaultCode = (lang: string) => {
-        if (lang === 'java') return 'class Solution {\n    // Implement your solution here\n}';
-        if (lang === 'python') return 'class Solution:\n    def solve(self):\n        pass';
+        if (lang === 'java') {
+            return 'import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n        \n    }\n}';
+        }
+        if (lang === 'python') {
+            return 'import sys\n\ndef main():\n    # Write your solution here\n    pass\n\nif __name__ == \'__main__\':\n    main()';
+        }
+        if (lang === 'cpp') {
+            return '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    return 0;\n}';
+        }
+        if (lang === 'javascript') {
+            return 'const fs = require(\'fs\');\n\nfunction main() {\n    const input = fs.readFileSync(0, \'utf-8\');\n    // Write your solution here\n    \n}\n\nmain();';
+        }
         return '// Start coding here...\n';
     };
 
@@ -216,6 +238,20 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                     <div className="prose prose-sm text-[14px] text-text-secondary max-w-none mb-6 leading-relaxed">
                         {problem.description}
                     </div>
+
+                    {problem.inputFormat && (
+                        <div className="mb-6">
+                            <h4 className="font-semibold text-xs text-text-primary uppercase tracking-wider mb-2">Input Format</h4>
+                            <div className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">{problem.inputFormat}</div>
+                        </div>
+                    )}
+
+                    {problem.outputFormat && (
+                        <div className="mb-6">
+                            <h4 className="font-semibold text-xs text-text-primary uppercase tracking-wider mb-2">Output Format</h4>
+                            <div className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">{problem.outputFormat}</div>
+                        </div>
+                    )}
 
                     {problem.constraints && problem.constraints.length > 0 && (
                         <div className="mb-6">
@@ -369,7 +405,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                             <div className="flex items-center space-x-3 pr-2">
                                 <span className="text-[10px] font-mono text-text-tertiary">{output.results?.[0]?.executionTimeMs || 0}ms</span>
                                 {output.allPassed ? (
-                                    <span className="text-[10px] font-bold text-success uppercase tracking-widest px-2 py-0.5 bg-success/10 rounded-full">Passed</span>
+                                    <span className="text-[10px] font-bold text-success uppercase tracking-widest px-2 py-0.5 bg-success/10 rounded-full">Accepted</span>
                                 ) : (
                                     <span className="text-[10px] font-bold text-danger uppercase tracking-widest px-2 py-0.5 bg-danger/10 rounded-full">Failed</span>
                                 )}
@@ -392,7 +428,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                                             <span className="text-[11px] font-bold text-text-tertiary uppercase">Case {i + 1}</span>
                                             {output && output.results?.[i] && (
                                                 <span className={`text-[10px] font-bold ${output.results[i].passed ? 'text-success' : 'text-danger'}`}>
-                                                    {output.results[i].passed ? '✓ Passed' : '✗ Failed'}
+                                                    {output.results[i].status ? `✓ ${output.results[i].status}` : (output.results[i].passed ? '✓ Accepted' : '✗ Wrong Answer')}
                                                 </span>
                                             )}
                                         </div>
@@ -463,40 +499,48 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                             </div>
                         ) : (
                             <pre className="font-mono text-[13px] text-white/95 whitespace-pre-wrap leading-relaxed animate-in fade-in duration-300">
-                                {output?.compileError || (output?.results?.[0]?.actualOutput ? (
+                                {output?.compileError || (output?.results && output.results.length > 0 ? (
                                     <div className="space-y-6">
-                                        {output.results.map((res, i) => (
+                                                                        {output.results.map((res, i) => (
                                             <div key={i} className="animate-in slide-in-from-left-2 duration-300">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="flex items-center space-x-2">
-                                                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Test Case {i + 1}</span>
+                                                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
+                                                            Test Case {i + 1} {res.hidden && <span className="text-violet-light font-normal capitalize">(Hidden)</span>}
+                                                        </span>
                                                         <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${res.passed ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'}`}>
-                                                            {res.passed ? 'PASSED' : 'FAILED'}
+                                                            {res.status ? res.status.toUpperCase() : (res.passed ? 'ACCEPTED' : 'WRONG ANSWER')}
                                                         </span>
                                                     </div>
                                                     <span className="text-[9px] font-mono text-text-tertiary">{res.executionTimeMs}ms</span>
                                                 </div>
 
-                                                <div className="space-y-3 font-mono text-[12px]">
-                                                    <div className="bg-white/[0.03] border border-white/10 rounded-lg overflow-hidden">
-                                                        <div className="px-3 py-1 bg-white/[0.05] border-b border-white/10 text-[9px] text-text-tertiary uppercase font-bold">Input</div>
-                                                        <div className="p-3 text-white/90 whitespace-pre-wrap break-all">{res.input || '<no-input>'}</div>
-                                                    </div>
-
-                                                    <div className="bg-[#0a0a0a] border border-white/5 rounded-lg overflow-hidden shadow-inner">
-                                                        <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Your Output</div>
-                                                        <div className={`p-3 whitespace-pre-wrap break-all ${res.passed ? 'text-success/80' : 'text-danger/80'}`}>
-                                                            {res.actualOutput || (res.error ? <span className="text-danger italic">Runtime Error: {res.error}</span> : '<no-output>')}
+                                                {!res.hidden ? (
+                                                    <div className="space-y-3 font-mono text-[12px]">
+                                                        <div className="bg-white/[0.03] border border-white/10 rounded-lg overflow-hidden">
+                                                            <div className="px-3 py-1 bg-white/[0.05] border-b border-white/10 text-[9px] text-text-tertiary uppercase font-bold">Input</div>
+                                                            <div className="p-3 text-white/90 whitespace-pre-wrap break-all">{res.input || '<no-input>'}</div>
                                                         </div>
-                                                    </div>
 
-                                                    {!res.passed && !res.error && (
-                                                        <div className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
-                                                            <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Expected Output</div>
-                                                            <div className="p-3 text-text-tertiary whitespace-pre-wrap break-all">{res.expectedOutput}</div>
+                                                        <div className="bg-[#0a0a0a] border border-white/5 rounded-lg overflow-hidden shadow-inner">
+                                                            <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Your Output</div>
+                                                            <div className={`p-3 whitespace-pre-wrap break-all ${res.passed ? 'text-success/80' : 'text-danger/80'}`}>
+                                                                {res.actualOutput || (res.error ? <span className="text-danger italic">Runtime Error: {res.error}</span> : '<no-output>')}
+                                                            </div>
                                                         </div>
-                                                    )}
-                                                </div>
+
+                                                        {!res.passed && !res.error && (
+                                                            <div className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
+                                                                <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Expected Output</div>
+                                                                <div className="p-3 text-text-tertiary whitespace-pre-wrap break-all">{res.expectedOutput}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-[11px] font-mono text-text-tertiary italic pl-2 py-1">
+                                                        // Input and output details are hidden for privacy.
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>

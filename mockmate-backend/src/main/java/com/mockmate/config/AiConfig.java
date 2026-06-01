@@ -13,7 +13,7 @@ public class AiConfig {
     @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
 
-    @Value("${app.gemini.model}")
+    @Value("${app.gemini.model:gemini-3.5-flash}")
     private String modelName;
 
     @Bean

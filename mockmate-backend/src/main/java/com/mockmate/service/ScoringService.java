@@ -48,7 +48,7 @@ public class ScoringService {
         if (apiKey != null && !apiKey.isEmpty()) {
             this.chatModel = GoogleAiGeminiChatModel.builder()
                     .apiKey(apiKey)
-                    .modelName("gemini-1.5-flash")
+                    .modelName("gemini-3.5-flash")
                     .temperature(0.2)
                     .build();
         }

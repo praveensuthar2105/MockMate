@@ -7,4 +7,5 @@ public class TestCase {
     private String input;
     private String expectedOutput;
     private String description;
+    private boolean hidden;
 }

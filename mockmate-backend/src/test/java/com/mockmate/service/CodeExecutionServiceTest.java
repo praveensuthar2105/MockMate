@@ -12,12 +12,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class CodeExecutionServiceTest {
 
     private CodeExecutionService codeExecutionService;
-    private RunnerTemplateService runnerTemplateService;
 
     @BeforeEach
     void setUp() {
-        runnerTemplateService = new RunnerTemplateService();
-        codeExecutionService = new CodeExecutionService(runnerTemplateService);
+        codeExecutionService = new CodeExecutionService();
     }
 
     private TestCase createTestCase(String input, String expectedOutput) {
@@ -29,10 +27,20 @@ class CodeExecutionServiceTest {
 
     @Test
     void testJavaIntArrayFormat_Correct() {
-        String code = "class Solution { public int[] twoSum(int[] nums, int target) { return new int[]{0,1}; } }";
-        List<TestCase> testCases = List.of(createTestCase("[2,7,11,15] 9", "[0, 1]"));
+        String code = "import java.util.*;\n" +
+                      "public class Main {\n" +
+                      "    public static void main(String[] args) {\n" +
+                      "        Scanner sc = new Scanner(System.in);\n" +
+                      "        if (sc.hasNextLine()) {\n" +
+                      "            String line = sc.nextLine();\n" +
+                      "            int target = sc.nextInt();\n" +
+                      "            System.out.println(\"0 1\");\n" +
+                      "        }\n" +
+                      "    }\n" +
+                      "}";
+        List<TestCase> testCases = List.of(createTestCase("2 7 11 15\n9", "0 1"));
 
-        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "int_array+int", "int_array", "twoSum");
+        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "", "", "");
 
         assertTrue(result.isCompiled());
         assertNull(result.getCompileError());
@@ -41,10 +49,16 @@ class CodeExecutionServiceTest {
 
     @Test
     void testPythonIntArrayFormat_Correct() {
-        String code = "class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]";
-        List<TestCase> testCases = List.of(createTestCase("[2,7,11,15] 9", "[0, 1]"));
+        String code = "import sys\n" +
+                      "def main():\n" +
+                      "    line1 = sys.stdin.readline()\n" +
+                      "    line2 = sys.stdin.readline()\n" +
+                      "    print(\"0 1\")\n" +
+                      "if __name__ == '__main__':\n" +
+                      "    main()";
+        List<TestCase> testCases = List.of(createTestCase("2 7 11 15\n9", "0 1"));
 
-        ExecutionResult result = codeExecutionService.execute("PYTHON", code, testCases, "int_array+int", "int_array", "twoSum");
+        ExecutionResult result = codeExecutionService.execute("PYTHON", code, testCases, "", "", "");
 
         assertTrue(result.isCompiled());
         assertNull(result.getCompileError());
@@ -53,10 +67,14 @@ class CodeExecutionServiceTest {
 
     @Test
     void testJavaCompilationError() {
-        String code = "class Solution { public int[] twoSum(int[] nums, int target) { return new int[]{0,1} } }"; // missing semicolon
-        List<TestCase> testCases = List.of(createTestCase("[2,7,11,15] 9", "[0, 1]"));
+        String code = "public class Main {\n" +
+                      "    public static void main(String[] args) {\n" +
+                      "        System.out.println(\"Hello\") // missing semicolon\n" +
+                      "    }\n" +
+                      "}";
+        List<TestCase> testCases = List.of(createTestCase("2 7 11 15\n9", "0 1"));
 
-        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "int_array+int", "int_array", "twoSum");
+        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "", "", "");
 
         assertFalse(result.isCompiled());
         assertNotNull(result.getCompileError());
@@ -65,10 +83,14 @@ class CodeExecutionServiceTest {
 
     @Test
     void testJavaTimeout() {
-        String code = "class Solution { public int[] twoSum(int[] nums, int target) { while(true){} } }";
-        List<TestCase> testCases = List.of(createTestCase("[2,7,11,15] 9", "[0, 1]"));
+        String code = "public class Main {\n" +
+                      "    public static void main(String[] args) {\n" +
+                      "        while(true) {}\n" +
+                      "    }\n" +
+                      "}";
+        List<TestCase> testCases = List.of(createTestCase("2 7 11 15\n9", "0 1"));
 
-        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "int_array+int", "int_array", "twoSum");
+        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "", "", "");
 
         assertTrue(result.isCompiled());
         assertFalse(result.isAllPassed());
@@ -77,10 +99,15 @@ class CodeExecutionServiceTest {
 
     @Test
     void testJavaRuntimeException() {
-        String code = "class Solution { public int[] twoSum(int[] nums, int target) { int x = nums[100]; return new int[]{x}; } }";
-        List<TestCase> testCases = List.of(createTestCase("[2,7] 9", "[0, 1]"));
+        String code = "public class Main {\n" +
+                      "    public static void main(String[] args) {\n" +
+                      "        int[] arr = new int[2];\n" +
+                      "        int x = arr[100];\n" +
+                      "    }\n" +
+                      "}";
+        List<TestCase> testCases = List.of(createTestCase("2 7", "0 1"));
 
-        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "int_array+int", "int_array", "twoSum");
+        ExecutionResult result = codeExecutionService.execute("JAVA", code, testCases, "", "", "");
 
         assertTrue(result.isCompiled());
         assertFalse(result.isAllPassed());
@@ -90,12 +117,14 @@ class CodeExecutionServiceTest {
 
     @Test
     void testSmartRecoveryPythonMatrix() {
-        String code = "class Solution:\n    def searchMatrix(self, matrix, target):\n        return True";
-        // User signature says int_array+int, but code uses List[List[int]] format (in smart recovery logic it checks for specific strings, let's inject it into code so it hits it)
-        String smartCode = "class Solution:\n    def searchMatrix(self, matrix: List[List[int]], target: int):\n        return True";
-        List<TestCase> testCases = List.of(createTestCase("[[1,3,5,7],[10,11,16,20],[23,30,34,60]] 3", "true"));
+        String code = "import sys\n" +
+                      "def main():\n" +
+                      "    print(\"true\")\n" +
+                      "if __name__ == '__main__':\n" +
+                      "    main()";
+        List<TestCase> testCases = List.of(createTestCase("1 3 5 7\n10 11 16 20\n3", "true"));
 
-        ExecutionResult result = codeExecutionService.execute("PYTHON", smartCode, testCases, "int_array+int", "boolean", "searchMatrix");
+        ExecutionResult result = codeExecutionService.execute("PYTHON", code, testCases, "", "", "");
 
         assertTrue(result.isCompiled());
         assertTrue(result.isAllPassed());

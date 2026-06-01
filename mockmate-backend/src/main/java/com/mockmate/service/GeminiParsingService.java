@@ -14,7 +14,7 @@ public class GeminiParsingService {
         if (apiKey != null && !apiKey.isEmpty()) {
             this.chatModel = GoogleAiGeminiChatModel.builder()
                     .apiKey(apiKey)
-                    .modelName("gemini-1.5-flash")
+                    .modelName("gemini-3.5-flash")
                     .temperature(0.1) // Low temperature for factual extraction
                     .build();
         } else {
@@ -43,7 +43,8 @@ public class GeminiParsingService {
                 "  \"education\": \"Degree, University, Year\",\n" +
                 "  \"summary\": \"Brief professional summary\"\n" +
                 "}\n\n" +
-                "Do not include any markdown formatting, code blocks like ```json, or explanations. Only output the raw JSON string.\n\n" +
+                "Do not include any markdown formatting, code blocks like ```json, or explanations. Only output the raw JSON string.\n\n"
+                +
                 "Resume Text:\n" + rawText;
 
         try {

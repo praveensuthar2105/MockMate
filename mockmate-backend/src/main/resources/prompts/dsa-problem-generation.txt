@@ -6,15 +6,15 @@ Return ONLY valid compact JSON (no markdown, no extra text):
   "constraints": ["constraint1", "constraint2"],
   "examples": [
     {
-      "input": "human readable input",
-      "output": "human readable output",
-      "explanation": "why this output"
+      "input": "human readable description of input (e.g., 'nums = [1, 2, 3], target = 5')",
+      "output": "human readable description of expected output (e.g., '2')",
+      "explanation": "why this output is correct"
     }
   ],
   "testCases": [
-    {"input": "exact stdin value", "expectedOutput": "exact stdout value"},
-    {"input": "exact stdin value", "expectedOutput": "exact stdout value"},
-    {"input": "exact stdin value", "expectedOutput": "exact stdout value"}
+    {"input": "exact stdin stream value (e.g., '3 5\\n1 2 3')", "expectedOutput": "exact stdout stream value (e.g., '2')"},
+    {"input": "exact stdin stream value", "expectedOutput": "exact stdout stream value"},
+    {"input": "exact stdin stream value", "expectedOutput": "exact stdout stream value"}
   ],
   "hints": [
     {"level": 1, "hint": "approach direction only"},
@@ -24,32 +24,24 @@ Return ONLY valid compact JSON (no markdown, no extra text):
   "difficulty": "{difficulty}",
   "timeComplexityExpected": "O(...)",
   "spaceComplexityExpected": "O(...)",
-  "inputFormat": "STRICTLY one of: int, string, int_array, string_array, int_array+int, string+int, int_array+int_array, matrix, matrix+int, matrix+int_array, binary_tree, linked_list",
-  "outputFormat": "STRICTLY one of: int, string, boolean, int_array, string_array, matrix",
-  "methodSignature": "methodName only, no params, no types"
+  "inputFormat": "Clear description of stdin format (e.g. 'First line contains N and K. Second line contains N space-separated integers.')",
+  "outputFormat": "Clear description of stdout format (e.g. 'Print a single integer representing the answer.')"
 }
 
-CRITICAL: ONLY use the formats listed in inputFormat. If a problem requires a format not listed here, DO NOT generate it. Choose a different problem.
+CRITICAL RULES FOR STDIN / STDOUT STREAMS:
+1. The user writes a complete runnable program reading from stdin (e.g., using Scanner/BufferedReader) and printing to stdout.
+2. `testCases.input` MUST NOT contain LeetCode parameter syntax like `nums = [1,2,1,2,3]`, `k = 2`, brackets, or variable declarations. It must contain ONLY the raw text stream that matches the `inputFormat` exactly.
+3. Every testCase input MUST use newlines (`\n` or actual newline characters) or spaces to separate inputs exactly as a user scanner would expect.
+   For example, if inputFormat says:
+   - First line: integer N (array size).
+   - Second line: N space-separated integers.
+   - Third line: integer K.
+   Then `testCases.input` MUST look exactly like:
+   "5\n1 2 1 2 3\n2" (or using actual newline characters in the JSON).
+4. `testCases.expectedOutput` must be the exact raw output (e.g., "3").
+5. Keep all strings under 100 characters. No unicode or special characters.
+6. Generate exactly 10 test cases. The first 3 test cases must correspond directly to the examples. The remaining 7 test cases must be diverse edge cases, extreme values, empty bounds, single-element cases, or large inputs to thoroughly validate correctness.
+7. Keep all test case strings under 200 characters to prevent token bloat.
 
 
-CRITICAL RULES FOR testCases:
-- input field must be EXACTLY what stdin receives
-- For int_array: space-separated integers on one line, example: "2 7 11 15"
-- For int_array+int: array on line 1, integer on line 2, example: "2 7 11 15\n9"
-- For string: just the string, example: "hello"
-- For string+int: string on line 1, integer on line 2, example: "hello\n3"
-- For matrix: first line = rows cols, then each row, example: "3 3\n1 2 3\n4 5 6\n7 8 9"
-- For binary_tree: space-separated level-order values, use the literal string "null" for missing nodes, example: "4 2 7 1 3 6 9"
-- For linked_list: space-separated node values, example: "1 2 3 4 5"
-- expectedOutput must be EXACTLY what stdout should print
-- For int_array output: space-separated (NOT comma-separated), example: "0 1" not "[0, 1]"
-- For boolean: lowercase "true" or "false"
-- Generate exactly 3 test cases
-- Keep all strings under 50 characters
-- No unicode, no special characters in test cases
-- CRITICAL: inputFormat must list ALL types for the function parameters, lowercase, separated by +.
-  - Example for String s and int k: "string+int"
-  - Example for int[] nums and int target: "int_array+int"
-  - The number of types in inputFormat MUST match the problem description.
-- CRITICAL: Use "matrix" for 2D arrays (int[][]) and "int_array" for 1D arrays (int[]). Do not use "int_array" if the problem logic requires a 2D grid/matrix.
 

@@ -32,7 +32,7 @@ export const codeService = {
                 code,
                 customInput
             }, {
-                timeout: 10000
+                timeout: 60000
             });
             return response.data;
         } catch (error: any) {
@@ -46,7 +46,7 @@ export const codeService = {
                 language: toBackendLanguage(language),
                 code
             }, {
-                timeout: 15000
+                timeout: 60000
             });
             return response.data;
         } catch (error: any) {

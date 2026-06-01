@@ -119,6 +119,8 @@ export interface TestCaseResult {
     error: string | null
     timedOut: boolean
     executionTimeMs: number
+    status?: string
+    hidden?: boolean
 }
 
 export interface CodeEvaluation {

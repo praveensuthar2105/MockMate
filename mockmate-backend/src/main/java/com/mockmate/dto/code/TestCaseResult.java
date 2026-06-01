@@ -11,4 +11,7 @@ public class TestCaseResult {
     private String error;
     private boolean timedOut;
     private long executionTimeMs;
+    private String status; // "Accepted", "Wrong Answer", "Runtime Error", "Time Limit Exceeded"
+    private boolean hidden;
 }
+

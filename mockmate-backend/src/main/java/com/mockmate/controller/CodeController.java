@@ -31,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mockmate.service.ChatService;
+
 @RestController
 @RequestMapping("/api/code")
 @RequiredArgsConstructor
@@ -43,10 +45,11 @@ public class CodeController {
     private final HintService hintService;
     private final InterviewSessionRepository sessionRepository;
     private final CodeSubmissionRepository codeSubmissionRepository;
+    private final ChatService chatService;
 
     @GetMapping("/problem/{sessionId}")
     public ResponseEntity<DsaStatusResponse> getProblem(@PathVariable Long sessionId, Authentication authentication) {
-        InterviewSession session = validateSessionOwnershipAndPhase(sessionId, authentication.getName());
+        InterviewSession session = validateSessionOwnership(sessionId, authentication.getName());
         
         if (session.getDsaProblemJson() == null || session.getDsaProblemJson().isBlank()) {
             return ResponseEntity.notFound().build();
@@ -73,6 +76,8 @@ public class CodeController {
         candidateView.setJavaStarterCode(problem.getJavaStarterCode());
         candidateView.setPythonStarterCode(problem.getPythonStarterCode());
         candidateView.setJavascriptStarterCode(problem.getJavascriptStarterCode());
+        candidateView.setInputFormat(problem.getInputFormat());
+        candidateView.setOutputFormat(problem.getOutputFormat());
 
         response.setProblem(candidateView);
 
@@ -126,6 +131,9 @@ public class CodeController {
 
         // Persist as draft submission so AI interviewer has context
         persistDraftSubmission(session, request.getLanguage(), request.getCode(), result);
+
+        // Trigger AI feedback asynchronously so it doesn't block the execution response
+        chatService.triggerAsyncCodeFeedback(session.getId(), request.getCode(), request.getLanguage(), result);
 
         return ResponseEntity.ok(result);
     }
@@ -212,9 +220,19 @@ public class CodeController {
         return submissions.get(0).getHintsUsed() != null ? submissions.get(0).getHintsUsed() : 0;
     }
 
-    private InterviewSession validateSessionOwnershipAndPhase(Long sessionId, String email) {
+    private InterviewSession validateSessionOwnership(Long sessionId, String email) {
         InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+
+        if (!session.getUser().getEmail().equals(email)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Unauthorized access to session");
+        }
+
+        return session;
+    }
+
+    private InterviewSession validateSessionOwnershipAndPhase(Long sessionId, String email) {
+        InterviewSession session = validateSessionOwnership(sessionId, email);
 
         if (!session.getUser().getEmail().equals(email)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Unauthorized access to session");

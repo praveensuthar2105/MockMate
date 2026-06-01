@@ -13,13 +13,13 @@ import java.util.List;
 public class CorsConfig {
 
     @Value("${app.cors.allowed-origins:http://localhost:5173}")
-    private String allowedOrigins;
+    private String[] allowedOrigins;
 
     @Bean
     public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of(allowedOrigins));
+        config.setAllowedOrigins(Arrays.asList(allowedOrigins));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
