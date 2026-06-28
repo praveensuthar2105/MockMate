@@ -27,6 +27,7 @@ public class PhaseTimerService {
     private final com.mockmate.repository.PhaseResultRepository phaseResultRepository;
     private final DsaProblemService dsaProblemService;
     private final InterviewService interviewService;
+    private final PhaseTimerService self;
 
     public PhaseTimerService(InterviewSessionRepository sessionRepository,
             SimpMessagingTemplate simpMessagingTemplate,
@@ -34,7 +35,8 @@ public class PhaseTimerService {
             ChatService chatService,
             com.mockmate.repository.PhaseResultRepository phaseResultRepository,
             DsaProblemService dsaProblemService,
-            @Lazy InterviewService interviewService) {
+            @Lazy InterviewService interviewService,
+            @Lazy PhaseTimerService self) {
         this.sessionRepository = sessionRepository;
         this.simpMessagingTemplate = simpMessagingTemplate;
         this.phaseQuestionService = phaseQuestionService;
@@ -42,15 +44,14 @@ public class PhaseTimerService {
         this.phaseResultRepository = phaseResultRepository;
         this.dsaProblemService = dsaProblemService;
         this.interviewService = interviewService;
+        this.self = self;
     }
-
-    private final java.util.concurrent.ConcurrentHashMap<Long, Object> transitionLocks = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Scheduled(fixedRate = 1000)
     public void checkTimers() {
         List<InterviewSession> activeSessions = sessionRepository.findByStatusAndPhaseEndTimeIsNotNull(SessionStatus.IN_PROGRESS);
 
-                for (InterviewSession session : activeSessions) {
+        for (InterviewSession session : activeSessions) {
             if (session.getStatus() != SessionStatus.IN_PROGRESS || session.getPhaseEndTime() == null) {
                 continue;
             }
@@ -58,11 +59,10 @@ public class PhaseTimerService {
             long secondsRemaining = ChronoUnit.SECONDS.between(LocalDateTime.now(), session.getPhaseEndTime());
 
             if (secondsRemaining <= 0) {
-                Object sessionLock = transitionLocks.computeIfAbsent(session.getId(), id -> new Object());
                 try {
                     advancePhaseOrComplete(session, false);
-                } finally {
-                    transitionLocks.remove(session.getId(), sessionLock);
+                } catch (Exception e) {
+                    log.error("Failed to advance phase for session {}", session.getId(), e);
                 }
             } else if (secondsRemaining % 30 == 0 || secondsRemaining <= 10) {
                 simpMessagingTemplate.convertAndSend(
@@ -72,66 +72,99 @@ public class PhaseTimerService {
         }
     }
 
-    @org.springframework.transaction.annotation.Transactional
     public void advancePhaseOrComplete(InterviewSession inputSession, boolean isManualTrigger) {
         Long sessionId = inputSession.getId();
-        Object lock = transitionLocks.computeIfAbsent(sessionId, k -> new Object());
 
-        synchronized (lock) {
-            // Re-fetch to guarantee we have the absolutely latest database state
-            InterviewSession session = sessionRepository.findById(sessionId).orElseThrow();
+        // 1. Perform database state transition updates under a pessimistic write lock transaction via proxy
+        InterviewSession session = self.performPhaseTransitionDbUpdates(sessionId, isManualTrigger);
+        if (session == null) {
+            return; // State already advanced or no action needed
+        }
 
-            // If triggered by timer, double-check that another thread didn't already advance it
-            if (!isManualTrigger && session.getPhaseEndTime() != null) {
-                long secondsRemaining = ChronoUnit.SECONDS.between(LocalDateTime.now(), session.getPhaseEndTime());
-                if (secondsRemaining > 0) {
-                    log.info("Session {} already advanced by another thread. Skipping.", sessionId);
-                    return;
-                }
+        PhaseType next = session.getCurrentPhase();
+
+        // 2. If transition led to completion, run scoring and report (outside transaction block)
+        if (session.getStatus() == SessionStatus.COMPLETED) {
+            interviewService.endSession(sessionId);
+            simpMessagingTemplate.convertAndSend(
+                    "/topic/session/" + sessionId,
+                    WsEvent.phaseChange(null));
+        } else {
+            // 3. Otherwise, we transitioned to a new phase. Generate problem if DSA (outside active transaction)
+            if (next == PhaseType.DSA) {
+                dsaProblemService.generateProblem(session);
+                // Re-fetch updated problem state
+                session = sessionRepository.findById(sessionId).orElseThrow();
             }
 
-            PhaseType next = getNextPhase(session);
-
-            if (next == null) {
-                com.mockmate.model.PhaseResult result = new com.mockmate.model.PhaseResult();
-                result.setSession(session);
-                result.setPhaseType(session.getCurrentPhase());
-                result.setCompletedAt(LocalDateTime.now());
-                phaseResultRepository.save(result);
-
-                interviewService.endSession(session.getId());
-
-                simpMessagingTemplate.convertAndSend(
-                        "/topic/session/" + session.getId(),
-                        WsEvent.phaseChange(null));
+            // 4. Generate first question (outside active transaction)
+            String firstQuestion = session.getPreGeneratedOpener();
+            if (firstQuestion == null || firstQuestion.isBlank()) {
+                firstQuestion = phaseQuestionService.generateFirstQuestion(session);
             } else {
-                com.mockmate.model.PhaseResult result = new com.mockmate.model.PhaseResult();
-                result.setSession(session);
-                result.setPhaseType(session.getCurrentPhase());
-                result.setCompletedAt(LocalDateTime.now());
-                phaseResultRepository.save(result);
+                log.info("Using cached pre-generated opener for session {}, phase {}", sessionId, next);
+                self.clearPreGeneratedOpener(sessionId);
+            }
 
-                session.setCurrentPhase(next);
-                int duration = getDurationForPhase(session, next);
-                session.setPhaseEndTime(LocalDateTime.now().plusMinutes(duration));
-                session = sessionRepository.saveAndFlush(session);
+            // 5. Persist message and broadcast (in a short transaction) via proxy
+            self.saveOpeningMessageAndNotify(sessionId, firstQuestion, next);
 
-                if (next == PhaseType.DSA) {
-                    dsaProblemService.generateProblem(session.getId());
-                }
+            // 6. Trigger pre-generation for the next phase asynchronously
+            self.preGenerateNextPhaseDataAsync(sessionId);
+        }
+    }
 
-                String firstQuestion = phaseQuestionService.generateFirstQuestion(session);
-                chatService.saveAiMessage(session, firstQuestion);
+    @Transactional
+    public InterviewSession performPhaseTransitionDbUpdates(Long sessionId, boolean isManualTrigger) {
+        // Enforce postgres row-level lock
+        InterviewSession session = sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
 
-                simpMessagingTemplate.convertAndSend(
-                        "/topic/session/" + session.getId(),
-                        WsEvent.phaseChange(next));
+        if (session.getStatus() == SessionStatus.COMPLETED) {
+            return null;
+        }
 
-                simpMessagingTemplate.convertAndSend(
-                        "/topic/session/" + session.getId(),
-                        WsEvent.message(firstQuestion));
+        // Double-check remaining time for safety under concurrent threads
+        if (!isManualTrigger && session.getPhaseEndTime() != null) {
+            long secondsRemaining = ChronoUnit.SECONDS.between(LocalDateTime.now(), session.getPhaseEndTime());
+            if (secondsRemaining > 0) {
+                log.info("Session {} already advanced by another thread. Skipping.", sessionId);
+                return null;
             }
         }
+
+        PhaseType next = getNextPhase(session);
+
+        com.mockmate.model.PhaseResult result = new com.mockmate.model.PhaseResult();
+        result.setSession(session);
+        result.setPhaseType(session.getCurrentPhase());
+        result.setCompletedAt(LocalDateTime.now());
+        phaseResultRepository.save(result);
+
+        if (next == null) {
+            session.setStatus(SessionStatus.COMPLETED);
+            session.setEndedAt(LocalDateTime.now());
+        } else {
+            session.setCurrentPhase(next);
+            int duration = getDurationForPhase(session, next);
+            session.setPhaseEndTime(LocalDateTime.now().plusMinutes(duration));
+        }
+
+        return sessionRepository.saveAndFlush(session);
+    }
+
+    @Transactional
+    public void saveOpeningMessageAndNotify(Long sessionId, String firstQuestion, PhaseType newPhase) {
+        InterviewSession session = sessionRepository.findById(sessionId).orElseThrow();
+        chatService.saveAiMessage(session, firstQuestion);
+
+        simpMessagingTemplate.convertAndSend(
+                "/topic/session/" + sessionId,
+                WsEvent.phaseChange(newPhase));
+
+        simpMessagingTemplate.convertAndSend(
+                "/topic/session/" + sessionId,
+                WsEvent.message(firstQuestion));
     }
 
     private PhaseType getNextPhase(InterviewSession session) {
@@ -169,8 +202,59 @@ public class PhaseTimerService {
         return switch (phase) {
             case RESUME_SCREEN -> session.getResumeDurationMins();
             case DSA -> session.getDsaDurationMins();
-            case SYSTEM_DESIGN -> 15; // Fallback
+            case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
             case HR -> session.getHrDurationMins();
         };
+    }
+
+    @Transactional
+    public void clearPreGeneratedOpener(Long sessionId) {
+        InterviewSession session = sessionRepository.findById(sessionId).orElse(null);
+        if (session != null) {
+            session.setPreGeneratedOpener(null);
+            sessionRepository.save(session);
+        }
+    }
+
+    @Transactional
+    public void savePreGeneratedOpener(Long sessionId, String opener) {
+        InterviewSession session = sessionRepository.findById(sessionId).orElse(null);
+        if (session != null) {
+            session.setPreGeneratedOpener(opener);
+            sessionRepository.save(session);
+        }
+    }
+
+    public void preGenerateNextPhaseDataAsync(Long sessionId) {
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                // Wait a small delay to let transaction commit
+                Thread.sleep(150);
+
+                InterviewSession session = sessionRepository.findById(sessionId).orElse(null);
+                if (session == null) return;
+
+                PhaseType next = getNextPhase(session);
+                if (next == null) return;
+
+                log.info("Starting background pre-generation of next phase {} for session {}", next, sessionId);
+
+                // 1. Pre-generate DSA problem if next round is DSA
+                if (next == PhaseType.DSA && (session.getDsaProblemGenerated() == null || !session.getDsaProblemGenerated())) {
+                    dsaProblemService.generateProblem(sessionId);
+                    // Refresh session reference
+                    session = sessionRepository.findById(sessionId).orElseThrow();
+                }
+
+                // 2. Pre-generate opener for the next phase
+                String opener = phaseQuestionService.generateFirstQuestionForPhase(session, next);
+
+                // 3. Save pre-generated opener
+                self.savePreGeneratedOpener(sessionId, opener);
+                log.info("Successfully pre-generated and cached opener for next phase {} of session {}", next, sessionId);
+            } catch (Exception e) {
+                log.error("Failed to pre-generate next phase data for session {}", sessionId, e);
+            }
+        });
     }
 }

@@ -47,6 +47,13 @@ public class DsaProblemService {
         }
     }
 
+    public DsaProblem generateProblem(InterviewSession session) {
+        if (session == null) {
+            throw new IllegalArgumentException("Session must not be null");
+        }
+        return generateProblem(session.getId());
+    }
+
     public DsaProblem generateProblem(Long sessionId) {
         InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
@@ -275,9 +282,9 @@ public class DsaProblemService {
     }
 
     /**
-     * Attempts to repair truncated JSON by closing any unclosed strings, arrays, and objects.
+     * Attempts to repair truncated JSON by finding the longest prefix that can be cleanly closed.
      */
-    private String repairTruncatedJson(String json) {
+    String repairTruncatedJson(String json) {
         if (json == null || json.isEmpty()) return json;
 
         // Check if it already parses cleanly
@@ -288,9 +295,110 @@ public class DsaProblemService {
             // needs repair
         }
 
-        StringBuilder sb = new StringBuilder(json);
+        // Search backward from the end, looking for the longest prefix that can be closed
+        int minLen = Math.max(1, json.length() - 2000);
+        for (int len = json.length(); len >= minLen; len--) {
+            String prefix = json.substring(0, len);
+            String repaired = tryCloseJson(prefix);
+            if (repaired != null) {
+                log.debug("JSON repair applied: trimmed to length {} and successfully closed", repaired.length());
+                return repaired;
+            }
+        }
 
-        // Track state
+        // Final fallback: original naive logic to append closing brackets/braces
+        return naiveRepairJson(json);
+    }
+
+    String tryCloseJson(String prefix) {
+        StringBuilder sb = new StringBuilder(prefix);
+        boolean inString = false;
+        boolean escaped = false;
+        java.util.Deque<Character> stack = new java.util.ArrayDeque<>();
+
+        for (int i = 0; i < prefix.length(); i++) {
+            char c = prefix.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) continue;
+
+            if (c == '{') stack.push('}');
+            else if (c == '[') stack.push(']');
+            else if (c == '}' || c == ']') {
+                if (!stack.isEmpty()) {
+                    char expected = stack.peek();
+                    if ((c == '}' && expected == '}') || (c == ']' && expected == ']')) {
+                        stack.pop();
+                    } else {
+                        return null; // Mismatched brackets in the prefix itself
+                    }
+                } else {
+                    return null; // Extra closing brackets
+                }
+            }
+        }
+
+        if (!inString) {
+            String trimmed = prefix.trim();
+            if (trimmed.endsWith(":") || trimmed.endsWith(",") || trimmed.endsWith("{") || trimmed.endsWith("[")) {
+                return null; // Avoid trailing colons, commas, or empty/unopened structures
+            }
+        }
+
+        if (inString) {
+            // Find where the current string started (the last unescaped double quote)
+            int lastQuote = -1;
+            boolean esc = false;
+            for (int i = 0; i < prefix.length(); i++) {
+                char c = prefix.charAt(i);
+                if (esc) {
+                    esc = false;
+                    continue;
+                }
+                if (c == '\\') {
+                    esc = true;
+                    continue;
+                }
+                if (c == '"') {
+                    lastQuote = i;
+                }
+            }
+            if (lastQuote != -1) {
+                String beforeQuote = prefix.substring(0, lastQuote).trim();
+                if (beforeQuote.endsWith(",") || beforeQuote.endsWith(":") || beforeQuote.endsWith("{") || beforeQuote.endsWith("[")) {
+                    if (prefix.substring(lastQuote + 1).trim().isEmpty()) {
+                        return null; // Reject empty strings created by truncation immediately after comma/colon/bracket
+                    }
+                }
+            }
+            sb.append('"');
+        }
+
+        while (!stack.isEmpty()) {
+            sb.append(stack.pop());
+        }
+
+        String candidate = sb.toString();
+        try {
+            objectMapper.readTree(candidate);
+            return candidate;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String naiveRepairJson(String json) {
+        StringBuilder sb = new StringBuilder(json);
         boolean inString = false;
         boolean escaped = false;
         java.util.Deque<Character> stack = new java.util.ArrayDeque<>();
@@ -318,19 +426,15 @@ public class DsaProblemService {
             }
         }
 
-        // If we're still inside a string, close it
         if (inString) {
             sb.append('"');
         }
 
-        // Close any unclosed brackets/braces
         while (!stack.isEmpty()) {
             sb.append(stack.pop());
         }
 
-        String repaired = sb.toString();
-        log.debug("JSON repair applied: added {} closing characters", repaired.length() - json.length());
-        return repaired;
+        return sb.toString();
     }
 
     private void sanitizeTestCasesAndExamples(DsaProblem problem) {

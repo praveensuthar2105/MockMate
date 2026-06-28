@@ -31,12 +31,11 @@ public class ResumeService {
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
 
-    @Transactional
     public ResumeResponse uploadResume(String userEmail, MultipartFile file) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        if (file.isEmpty() || !file.getOriginalFilename().endsWith(".pdf")) {
+        if (file.isEmpty() || file.getOriginalFilename() == null || !file.getOriginalFilename().endsWith(".pdf")) {
             throw new IllegalArgumentException("File must be a valid PDF");
         }
 
@@ -47,14 +46,22 @@ public class ResumeService {
                 directory.mkdirs();
             }
 
-            String uniqueFileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
+            // Sanitize filename to prevent path traversal
+            String originalFilename = file.getOriginalFilename();
+            String sanitizedFilename = new File(originalFilename).getName();
+            sanitizedFilename = sanitizedFilename.replaceAll("[^a-zA-Z0-9._-]", "_");
+            if (sanitizedFilename.isEmpty()) {
+                sanitizedFilename = "resume.pdf";
+            }
+
+            String uniqueFileName = UUID.randomUUID().toString() + "_" + sanitizedFilename;
             Path filePath = Paths.get(uploadDir, uniqueFileName);
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
             // Extract Text
             String rawText = pdfParserService.extractText(file);
 
-            // Use Gemini to parse resume text into structured JSON
+            // Use Gemini to parse resume text into structured JSON (runs outside active transaction)
             String parsedJson = "{}";
             try {
                 parsedJson = geminiParsingService.parseResume(rawText);
@@ -67,27 +74,34 @@ public class ResumeService {
             String skills = extractFromJson(parsedJson, "skills");
             String summary = extractFromJson(parsedJson, "summary");
 
-            // Save to DB
-            Resume resume = resumeRepository.findByUserId(user.getId()).orElse(new Resume());
-            resume.setUser(user);
-            resume.setFilePath(filePath.toString());
-            resume.setOriginalFileName(file.getOriginalFilename());
-            resume.setRawText(rawText);
-            resume.setParsedJson(parsedJson);
-            resume.setSkills(skills);
-            resume.setSummary(summary);
-
-            Resume savedResume = resumeRepository.save(resume);
-
-            // Update User profile status
-            user.setProfileComplete(true);
-            userRepository.save(user);
+            // Save to DB and complete profile (runs in a short transaction)
+            Resume savedResume = persistResumeAndCompleteProfile(user, filePath.toString(), originalFilename, rawText, parsedJson, skills, summary);
 
             return mapToResponse(savedResume);
 
         } catch (IOException e) {
             throw new RuntimeException("Failed to store file", e);
         }
+    }
+
+    @Transactional
+    public Resume persistResumeAndCompleteProfile(User user, String filePath, String originalFileName, String rawText, String parsedJson, String skills, String summary) {
+        Resume resume = resumeRepository.findByUserId(user.getId()).orElse(new Resume());
+        resume.setUser(user);
+        resume.setFilePath(filePath);
+        resume.setOriginalFileName(originalFileName);
+        resume.setRawText(rawText);
+        resume.setParsedJson(parsedJson);
+        resume.setSkills(skills);
+        resume.setSummary(summary);
+
+        Resume savedResume = resumeRepository.save(resume);
+
+        // Update User profile status
+        user.setProfileComplete(true);
+        userRepository.save(user);
+
+        return savedResume;
     }
 
     @Transactional(readOnly = true)

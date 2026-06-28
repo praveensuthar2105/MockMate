@@ -50,6 +50,7 @@ export interface InterviewSession {
     messages?: ChatMessage[]
     resumeDurationMins?: number
     dsaDurationMins?: number
+    systemDesignDurationMins?: number
     hrDurationMins?: number
     reportJson?: string
     dsaProblemJson?: string

@@ -26,6 +26,9 @@ It's a simple monorepo setup:
 - `/mockmate-frontend`: The React app.
 - `/uploads`: Where the resumes live temporarily.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the target real-time voice interview
+architecture and migration plan.
+
 ## How to run it locally
 
 ### Prerequisites

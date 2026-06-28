@@ -37,7 +37,8 @@ public class AuthController {
     @PutMapping("/profile/{id}")
     public ResponseEntity<AuthResponse> updateProfile(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateProfileRequest request) {
-        return ResponseEntity.ok(authService.updateProfile(id, request));
+            @Valid @RequestBody UpdateProfileRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        return ResponseEntity.ok(authService.updateProfile(id, request, authentication.getName()));
     }
 }

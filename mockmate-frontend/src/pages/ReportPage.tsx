@@ -208,7 +208,7 @@ export default function ReportPage() {
                         Full Context
                     </span>
                 </div>
-                <TranscriptAccordion sessionId={Number(id)} phases={phases} />
+                <TranscriptAccordion phases={phases} messages={session.messages || []} />
             </div>
 
             {/* Sticky Action Bar */}

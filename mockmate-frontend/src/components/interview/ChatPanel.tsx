@@ -3,27 +3,50 @@ import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { SendHorizontal, Volume2, VolumeX } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore';
-import { useWebSocket } from '../../hooks/useWebSocket';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
+import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { VoiceMicButton } from './VoiceMicButton';
+import { useInterviewRealtime } from '../../realtime/useInterviewRealtime';
 
 interface ChatPanelProps {
-    sessionId: number;
     isFloating?: boolean;
+    onCollapse?: () => void;
 }
 
-export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
+export function ChatPanel({ isFloating = false, onCollapse }: ChatPanelProps) {
     const [input, setInput] = useState('');
     const [isVoiceEnabled, setIsVoiceEnabled] = useState(() => {
         const saved = localStorage.getItem('mockmate-voice-enabled');
         return saved === null ? true : saved === 'true';
     });
-    const [isMinimized, setIsMinimized] = useState(isFloating);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const { messages, isTyping, addMessage } = useSessionStore();
-    const { sendMessage, isConnected } = useWebSocket(sessionId);
+    
+    // Real-time context containing STOMP controls and Gemini Live controls
+    const {
+        sendMessage,
+        isConnected,
+        isVoiceActive,
+        isMuted,
+        partialTranscript: livePartialTranscript,
+        toggleMute
+    } = useInterviewRealtime();
 
+    // Legacy Speech Synthesis (AI read-aloud)
     const { speak, stop: stopSpeaking } = useVoiceOutput();
+    
+    // Legacy Speech Recognition (browser mic to text box)
+    const {
+        isListening,
+        transcript,
+        finalTranscript,
+        startListening,
+        stopListening,
+        isSupported,
+        resetTranscript
+    } = useVoiceInput();
+
+    const baseTextRef = useRef('');
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -33,7 +56,7 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
         scrollToBottom();
     }, [messages, isTyping]);
 
-    // Persist voice setting
+    // Persist legacy voice setting
     useEffect(() => {
         localStorage.setItem('mockmate-voice-enabled', String(isVoiceEnabled));
     }, [isVoiceEnabled]);
@@ -48,31 +71,61 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
 
-    // Speak AI messages when they arrive if voice is enabled
+    // Speak AI messages when they arrive (ONLY in legacy mode when voice is enabled)
     useEffect(() => {
-        if (isVoiceEnabled && messages.length > 0) {
+        if (!isVoiceActive && isVoiceEnabled && messages.length > 0) {
             const lastMessage = messages[messages.length - 1];
             if (lastMessage.role === 'AI' || lastMessage.role === 'SYSTEM') {
                 speak(lastMessage.content);
             }
         }
         return () => stopSpeaking();
-    }, [messages, isVoiceEnabled, speak, stopSpeaking]);
+    }, [messages, isVoiceEnabled, isVoiceActive, speak, stopSpeaking]);
+
+    // Sync speech transcript in real-time (ONLY in legacy mode)
+    useEffect(() => {
+        if (!isVoiceActive && isListening) {
+            const speechText = [finalTranscript, transcript].filter(Boolean).join(' ');
+            const newValue = baseTextRef.current
+                ? `${baseTextRef.current} ${speechText}`
+                : speechText;
+            setInput(newValue);
+        }
+    }, [finalTranscript, transcript, isListening, isVoiceActive]);
 
     const handleInputChange = (val: string) => {
         setInput(val);
         if (val.trim()) stopSpeaking();
+        if (!isVoiceActive && isListening) {
+            stopListening();
+            resetTranscript();
+            baseTextRef.current = '';
+        }
     };
 
-    const handleTranscriptComplete = (transcript: string) => {
-        setInput(transcript);
-        // Manual send requested by user: transcript just populates the input field.
+    const handleMicClick = () => {
+        if (isVoiceActive) {
+            toggleMute();
+        } else {
+            if (isListening) {
+                stopListening();
+            } else {
+                baseTextRef.current = input;
+                startListening();
+            }
+        }
     };
 
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
         const content = input.trim();
         if (!content || !isConnected) return;
+
+        if (!isVoiceActive && isListening) {
+            stopListening();
+            resetTranscript();
+        }
+        baseTextRef.current = '';
 
         // Optimistic Update
         addMessage({
@@ -86,58 +139,40 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
         setInput('');
     };
 
-    const floatingClasses = isFloating
-        ? `fixed bottom-6 right-6 z-50 transition-all duration-300 bg-bg-surface border border-border shadow-2xl flex flex-col ${isMinimized ? 'w-14 h-14 rounded-full flex items-center justify-center overflow-hidden' : 'w-[380px] h-[550px] rounded-2xl overflow-hidden backdrop-blur-xl'}`
-        : "flex flex-col h-full bg-bg-surface border border-border rounded-xl shadow-sm overflow-hidden relative";
-
-    if (isFloating && isMinimized) {
-        return (
-            <button
-                onClick={() => setIsMinimized(false)}
-                className="fixed bottom-6 right-6 w-14 h-14 bg-violet text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50 animate-bounce-subtle"
-            >
-                <div className="relative">
-                    <SendHorizontal size={24} />
-                    {isTyping && <div className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full border-2 border-violet" />}
-                </div>
-            </button>
-        );
-    }
+    /* When isFloating, the outer container (border, shadow, header, collapse)
+       is managed by the parent (InterviewRoomPage floating overlay).
+       ChatPanel only renders messages + input bar. */
 
     return (
-        <div className={floatingClasses}>
-
-            {/* Header */}
-            <div className={`px-5 py-4 border-b border-border bg-bg-surface flex items-center justify-between shrink-0 ${isFloating ? 'cursor-move' : ''}`}>
-                <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-success' : 'bg-warning animate-pulse'}`} />
-                    <h2 className="font-display font-semibold text-text-primary m-0 text-sm">
-                        {isFloating ? 'AI Interviewer' : 'Interviewer AI'}
-                    </h2>
+        <div className={isFloating
+            ? "flex flex-col flex-1 overflow-hidden"
+            : "flex flex-col h-full bg-bg-surface border border-border rounded-xl shadow-sm overflow-hidden relative"
+        }>
+            {/* Header — only shown in non-floating (legacy) mode */}
+            {!isFloating && (
+                <div className="px-5 py-4 border-b border-border bg-bg-surface flex items-center justify-between shrink-0">
+                    <div className="flex items-center space-x-2">
+                        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-success' : 'bg-warning animate-pulse'}`} />
+                        <h2 className="font-display font-semibold text-text-primary m-0 text-sm">
+                            Interviewer AI
+                        </h2>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        {!isVoiceActive && (
+                            <button
+                                onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
+                                className={`p-1.5 rounded-lg transition-colors ${isVoiceEnabled ? 'text-violet bg-violet/10' : 'text-text-tertiary hover:text-text-secondary'}`}
+                                title={isVoiceEnabled ? 'Disable AI Voice' : 'Enable AI Voice'}
+                            >
+                                {isVoiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                    {isFloating && (
-                        <button
-                            onClick={() => setIsMinimized(true)}
-                            className="p-1 text-text-tertiary hover:text-text-primary"
-                        >
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M4 10H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                        </button>
-                    )}
-                    <button
-                        onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
-                        className={`p-1.5 rounded-lg transition-colors ${isVoiceEnabled ? 'text-violet bg-violet/10' : 'text-text-tertiary hover:text-text-secondary'}`}
-                        title={isVoiceEnabled ? 'Disable AI Voice' : 'Enable AI Voice'}
-                    >
-                        {isVoiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                    </button>
-                </div>
-            </div>
+            )}
 
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-bg-page/40">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-bg-page/40">
                 {messages.length === 0 && (
                     <div className="h-full flex flex-col items-center justify-center text-text-tertiary text-center">
                         <p className="text-xs">Say hello to start the session.</p>
@@ -157,7 +192,51 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
             </div>
 
             {/* Input Area */}
-            <div className={`p-4 bg-bg-surface border-t border-border shrink-0 ${isFloating ? 'pb-6' : ''}`}>
+            <div className={`p-3 bg-bg-surface border-t border-border shrink-0 ${isFloating ? 'pb-4' : ''}`}>
+                {/* Legacy Listening State Status bar */}
+                {!isVoiceActive && isListening && (
+                    <div className="mb-2 px-3 py-1.5 bg-violet-light/50 border border-violet/10 rounded-xl flex items-center justify-between text-[11px] text-violet animate-in fade-in slide-in-from-bottom-1 duration-200">
+                        <div className="flex items-center space-x-2">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-violet"></span>
+                            </span>
+                            <span className="font-medium">Listening continuously... Speak your answer</span>
+                        </div>
+                        <div className="flex items-end space-x-[2px] h-3 pb-[1px]">
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-1 h-[8px]" />
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-2 h-[12px]" />
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-3 h-[6px]" />
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-4 h-[10px]" />
+                        </div>
+                    </div>
+                )}
+
+                {/* Real-time Voice Active Status bar */}
+                {isVoiceActive && (
+                    <div className="mb-2 px-3 py-1.5 bg-violet-light/50 border border-violet/10 rounded-xl flex items-center justify-between text-[11px] text-violet animate-in fade-in duration-200">
+                        <div className="flex items-center space-x-2 overflow-hidden">
+                            <span className="relative flex h-2 w-2 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-violet"></span>
+                            </span>
+                            <span className="font-medium truncate">
+                                {isMuted
+                                    ? 'Microphone muted (Real-time)'
+                                    : livePartialTranscript
+                                        ? `Transcribing: "${livePartialTranscript}"`
+                                        : 'Real-time Voice Active... Speak anytime'}
+                            </span>
+                        </div>
+                        <div className="flex items-end space-x-[2px] h-3 pb-[1px] shrink-0">
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-1 h-[8px]" />
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-2 h-[12px]" />
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-3 h-[6px]" />
+                            <div className="w-[2px] bg-violet rounded-full animate-sound-wave-4 h-[10px]" />
+                        </div>
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="flex items-end space-x-2">
                     <div className="flex-1 relative flex items-center bg-bg-page border border-border rounded-xl focus-within:ring-1 focus-within:ring-violet focus-within:border-violet transition-colors">
                         <textarea
@@ -175,7 +254,12 @@ export function ChatPanel({ sessionId, isFloating = false }: ChatPanelProps) {
                         />
                     </div>
 
-                    <VoiceMicButton onTranscriptComplete={handleTranscriptComplete} disabled={!isConnected} />
+                    <VoiceMicButton
+                        isListening={isVoiceActive ? !isMuted : isListening}
+                        isSupported={isVoiceActive ? true : isSupported}
+                        onClick={handleMicClick}
+                        disabled={!isConnected}
+                    />
 
                     <button
                         type="submit"

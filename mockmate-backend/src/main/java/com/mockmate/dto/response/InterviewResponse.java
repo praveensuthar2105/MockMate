@@ -29,6 +29,7 @@ public class InterviewResponse {
     private Integer totalScore;
     private Integer resumeDurationMins;
     private Integer dsaDurationMins;
+    private Integer systemDesignDurationMins;
     private Integer hrDurationMins;
     private List<String> selectedPhases;
     private LocalDateTime endedAt;

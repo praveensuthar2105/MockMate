@@ -64,10 +64,15 @@ public class InterviewService {
 
         List<InterviewSession> activeSessions = sessionRepository.findByUserIdAndStatus(userId, SessionStatus.IN_PROGRESS);
         for (InterviewSession active : activeSessions) {
-            active.setStatus(SessionStatus.COMPLETED);
-            active.setEndedAt(LocalDateTime.now());
-            sessionRepository.save(active);
-            log.info("Automatically completed previous active session {} for user {}", active.getId(), userId);
+            try {
+                this.endSession(active.getId());
+                log.info("Automatically completed and evaluated previous active session {} for user {}", active.getId(), userId);
+            } catch (Exception e) {
+                log.error("Failed to automatically evaluate previous active session {}", active.getId(), e);
+                active.setStatus(SessionStatus.COMPLETED);
+                active.setEndedAt(LocalDateTime.now());
+                sessionRepository.save(active);
+            }
         }
 
         InterviewSession session = new InterviewSession();
@@ -136,11 +141,14 @@ public class InterviewService {
 
         // Pre-generate problem if starting in DSA phase so AI interviewer knows it
         if (saved.getCurrentPhase() == PhaseType.DSA) {
-            dsaProblemService.generateProblem(saved.getId());
+            dsaProblemService.generateProblem(saved);
         }
 
         String firstQuestion = phaseQuestionService.generateFirstQuestion(saved);
         chatService.saveAiMessage(saved, firstQuestion);
+
+        // Pre-generate next phase data (e.g. DSA problem/opener) asynchronously to make transitions instant
+        phaseTimerService.preGenerateNextPhaseDataAsync(sessionId);
 
         return mapToResponse(saved);
     }
@@ -175,7 +183,7 @@ public class InterviewService {
         
         // Ensure DSA problem is generated if phase advances to DSA
         if (session.getCurrentPhase() == PhaseType.DSA && (session.getDsaProblemGenerated() == null || !session.getDsaProblemGenerated())) {
-            dsaProblemService.generateProblem(session.getId());
+            dsaProblemService.generateProblem(session);
         }
         
         return session.getCurrentPhase();
@@ -186,18 +194,20 @@ public class InterviewService {
         InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
-        if (session.getStatus() == SessionStatus.COMPLETED) {
+        if (session.getStatus() == SessionStatus.COMPLETED && session.getReportJson() != null) {
             return mapToResponse(session);
         }
 
-        PhaseResult result = new PhaseResult();
-        result.setSession(session);
-        result.setPhaseType(session.getCurrentPhase());
-        result.setCompletedAt(LocalDateTime.now());
-        phaseResultRepository.save(result);
+        if (session.getStatus() != SessionStatus.COMPLETED) {
+            PhaseResult result = new PhaseResult();
+            result.setSession(session);
+            result.setPhaseType(session.getCurrentPhase());
+            result.setCompletedAt(LocalDateTime.now());
+            phaseResultRepository.save(result);
 
-        session.setStatus(SessionStatus.COMPLETED);
-        session.setEndedAt(LocalDateTime.now());
+            session.setStatus(SessionStatus.COMPLETED);
+            session.setEndedAt(LocalDateTime.now());
+        }
 
         try {
             List<PhaseType> phases = new java.util.ArrayList<>();
@@ -220,16 +230,22 @@ public class InterviewService {
 
             for (PhaseType phase : phases) {
                 java.util.Map<String, Object> phaseEvaluation = scoringService.evaluatePhase(session, phase);
-                if (phaseEvaluation != null && phaseEvaluation.containsKey("score")) {
-                    int score = ((Number) phaseEvaluation.get("score")).intValue();
-                    totalScore += score;
-                    phaseCount++;
+                if (phaseEvaluation != null) {
                     reportData.put(phase.name(), phaseEvaluation);
+                    
+                    // Only include in average score calculation if the phase actually had candidate activity
+                    if (phaseEvaluation.containsKey("score") && !"No activity in this phase.".equals(phaseEvaluation.get("feedback"))) {
+                        int score = ((Number) phaseEvaluation.get("score")).intValue();
+                        totalScore += score;
+                        phaseCount++;
+                    }
                 }
             }
 
             if (phaseCount > 0) {
                 session.setTotalScore(totalScore / phaseCount);
+            } else {
+                session.setTotalScore(0);
             }
             // IMPORTANT: only write to reportJson
             // DO NOT touch dsaProblemJson here

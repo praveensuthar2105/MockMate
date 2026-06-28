@@ -1,21 +1,24 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+const SpeechRecognition = typeof window !== 'undefined'
+    ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+    : null;
+
+const isSupported = !!SpeechRecognition;
+
 export const useVoiceInput = () => {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [finalTranscript, setFinalTranscript] = useState('');
     const recognitionRef = useRef<any>(null);
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const isSupported = !!SpeechRecognition;
-
     useEffect(() => {
-        if (!isSupported) return;
+        if (!isSupported || !SpeechRecognition) return;
 
         const recognition = new SpeechRecognition();
         recognition.lang = 'en-IN';
         recognition.interimResults = true;
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.maxAlternatives = 1;
 
         recognition.onstart = () => {
@@ -24,14 +27,17 @@ export const useVoiceInput = () => {
 
         recognition.onresult = (event: any) => {
             let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    setFinalTranscript(event.results[i][0].transcript);
+            let final = '';
+            for (let i = 0; i < event.results.length; ++i) {
+                const result = event.results[i];
+                if (result.isFinal) {
+                    final += result[0].transcript + ' ';
                 } else {
-                    interim += event.results[i][0].transcript;
+                    interim += result[0].transcript;
                 }
             }
-            setTranscript(interim);
+            setFinalTranscript(final.trim());
+            setTranscript(interim.trim());
         };
 
         recognition.onerror = (event: any) => {
@@ -44,7 +50,17 @@ export const useVoiceInput = () => {
         };
 
         recognitionRef.current = recognition;
-    }, [isSupported, SpeechRecognition]);
+
+        return () => {
+            if (recognitionRef.current) {
+                try {
+                    recognitionRef.current.abort();
+                } catch (e) {
+                    // Ignore errors on abort
+                }
+            }
+        };
+    }, []);
 
     const startListening = useCallback(() => {
         if (recognitionRef.current) {
@@ -60,7 +76,11 @@ export const useVoiceInput = () => {
 
     const stopListening = useCallback(() => {
         if (recognitionRef.current) {
-            recognitionRef.current.stop();
+            try {
+                recognitionRef.current.stop();
+            } catch (err) {
+                console.error('STT Stop Error:', err);
+            }
         }
     }, []);
 

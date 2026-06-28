@@ -110,9 +110,13 @@ public class AuthService {
         throw new IllegalArgumentException("Invalid refresh token");
     }
 
-    public AuthResponse updateProfile(Long userId, UpdateProfileRequest request) {
+    public AuthResponse updateProfile(Long userId, UpdateProfileRequest request, String authenticatedEmail) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (!user.getEmail().equals(authenticatedEmail)) {
+            throw new org.springframework.security.access.AccessDeniedException("Unauthorized to update this profile");
+        }
 
         user.setName(request.name());
         user.setExperienceLevel(request.experienceLevel());

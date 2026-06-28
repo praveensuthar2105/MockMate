@@ -13,7 +13,7 @@ public class AiConfig {
     @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
 
-    @Value("${app.gemini.model:gemini-3.5-flash}")
+    @Value("${app.gemini.model}")
     private String modelName;
 
     @Bean
@@ -22,7 +22,7 @@ public class AiConfig {
         return GoogleAiGeminiChatModel.builder()
                 .apiKey(geminiApiKey)
                 .modelName(modelName)
-                .temperature(0.4)
+                .temperature(0.7)
                 .maxOutputTokens(8192)
                 .maxRetries(3)
                 .build();

@@ -70,6 +70,10 @@ public class InterviewSession {
     @Builder.Default
     private Integer dsaDurationMins = 30;
 
+    @Column(name = "system_design_duration_mins", columnDefinition = "integer default 15")
+    @Builder.Default
+    private Integer systemDesignDurationMins = 15;
+
     @Column(name = "hr_duration_mins", columnDefinition = "integer default 10")
     @Builder.Default
     private Integer hrDurationMins = 10;
@@ -90,4 +94,15 @@ public class InterviewSession {
 
     @Column(name = "selected_phases")
     private String selectedPhases;
+
+    @Column(name = "current_agent_state", length = 50)
+    @Builder.Default
+    private String currentAgentState = "RESUME_SCREEN";
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "agent_metadata", columnDefinition = "jsonb")
+    private String agentMetadata;
+
+    @Column(name = "pre_generated_opener", columnDefinition = "TEXT")
+    private String preGeneratedOpener;
 }

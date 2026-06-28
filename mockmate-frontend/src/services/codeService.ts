@@ -32,7 +32,7 @@ export const codeService = {
                 code,
                 customInput
             }, {
-                timeout: 60000
+                timeout: 30000
             });
             return response.data;
         } catch (error: any) {

@@ -103,7 +103,7 @@ public class CodeController {
     public ResponseEntity<ExecutionResult> runCode(@Valid @RequestBody CodeRunRequest request,
             Authentication authentication) {
         InterviewSession session = validateSessionOwnershipAndPhase(request.getSessionId(), authentication.getName());
-        DsaProblem problem = dsaProblemService.generateProblem(session.getId());
+        DsaProblem problem = dsaProblemService.generateProblem(session);
         if (problem == null) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to generate or retrieve DSA problem.");
         }
@@ -133,8 +133,6 @@ public class CodeController {
         persistDraftSubmission(session, request.getLanguage(), request.getCode(), result);
 
         // Trigger AI feedback asynchronously so it doesn't block the execution response
-        chatService.triggerAsyncCodeFeedback(session.getId(), request.getCode(), request.getLanguage(), result);
-
         return ResponseEntity.ok(result);
     }
 
@@ -180,7 +178,7 @@ public class CodeController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Code already submitted for this session");
         }
 
-        DsaProblem problem = dsaProblemService.generateProblem(session.getId());
+        DsaProblem problem = dsaProblemService.generateProblem(session);
         List<TestCase> allTests = new ArrayList<>();
         if (problem.getTestCases() != null)
             allTests.addAll(problem.getTestCases());
@@ -190,12 +188,20 @@ public class CodeController {
                 allTests, problem.getInputFormat(), problem.getOutputFormat(), problem.getMethodSignature());
 
         // AI Evaluation - NO DATABASE LOCK HELD
-        CodeEvaluation evaluation = codeEvaluationService.evaluate(request.getCode(), request.getLanguage().name(),
-                problem, executionResult, session.getId());
+        CodeSubmission submission = submissions.isEmpty() ? new CodeSubmission() : submissions.get(0);
+        if (submission.getSession() == null) {
+            submission.setSession(session);
+            submission.setHintsUsed(0);
+        }
 
-        // Persistence - DATABASE LOCK HELD ONLY FOR THE SAVE
-        return ResponseEntity.ok(codeEvaluationService.persistEvaluation(request.getCode(),
-                request.getLanguage().name(), executionResult, session.getId(), evaluation));
+        CodeEvaluation evaluation = codeEvaluationService.evaluate(
+                request.getCode(),
+                request.getLanguage().name(),
+                problem,
+                executionResult,
+                submission);
+
+        return ResponseEntity.ok(evaluation);
     }
 
     @PostMapping("/hint")

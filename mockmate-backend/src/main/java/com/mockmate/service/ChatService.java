@@ -28,8 +28,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -41,15 +39,12 @@ public class ChatService {
         private final ResumeRepository resumeRepository;
         private final CodeSubmissionRepository codeSubmissionRepository;
         private final ObjectMapper objectMapper;
-        private final SimpMessagingTemplate simpMessagingTemplate;
 
         private String baseContextTemplate;
         private String resumeScreenTemplate;
         private String dsaTemplate;
         private String systemDesignTemplate;
         private String hrTemplate;
-        private String dsaAnalysisTemplate;
-        private String dsaFollowupEvalTemplate;
 
         @PostConstruct
         public void loadPromptTemplates() {
@@ -58,8 +53,6 @@ public class ChatService {
                 dsaTemplate = loadTemplate("prompts/dsa.txt");
                 systemDesignTemplate = loadTemplate("prompts/system-design.txt");
                 hrTemplate = loadTemplate("prompts/hr.txt");
-                dsaAnalysisTemplate = loadTemplate("prompts/dsa-analysis.txt");
-                dsaFollowupEvalTemplate = loadTemplate("prompts/dsa-followup-eval.txt");
                 log.info("All prompt templates loaded successfully");
         }
 
@@ -77,7 +70,7 @@ public class ChatService {
         @Transactional
         public ChatResponse processMessage(Long sessionId, String userMessage) {
                 Objects.requireNonNull(sessionId, "sessionId must not be null");
-                InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
+                InterviewSession session = sessionRepository.findById(sessionId)
                                 .orElseThrow(() -> new RuntimeException("Interview session not found"));
 
                 if (session.getStatus() == SessionStatus.COMPLETED) {
@@ -136,73 +129,45 @@ public class ChatService {
                 return chatMessageRepository.save(aiMsg);
         }
 
+        @Transactional
+        public void persistDraftSubmission(Long sessionId, String language, String code) {
+                InterviewSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Interview session not found"));
+
+                List<CodeSubmission> submissions = codeSubmissionRepository
+                                .findBySessionIdOrderBySubmittedAtDesc(sessionId);
+
+                CodeSubmission submission;
+                if (!submissions.isEmpty() && !Boolean.TRUE.equals(submissions.get(0).getSubmitted())) {
+                        submission = submissions.get(0);
+                } else {
+                        submission = new CodeSubmission();
+                        submission.setSession(session);
+                        submission.setHintsUsed(0);
+                }
+
+                submission.setLanguage(language);
+                submission.setCode(code);
+                submission.setSubmitted(false);
+                codeSubmissionRepository.save(submission);
+        }
+
+        /**
+         * Draft feedback is intentionally throttled at the transport boundary for now.
+         * The current code draft remains available in the next interviewer turn through
+         * {@link #buildSubmissionContext(InterviewSession)}.
+         */
+        public void triggerAsyncCodeDraftFeedback(Long sessionId, String code, String language) {
+                log.debug("Code draft context updated for session {} ({}, {} chars)",
+                                sessionId,
+                                language,
+                                code != null ? code.length() : 0);
+        }
+
         private String getAiResponse(InterviewSession session, String userMessage) {
                 if (chatLanguageModel.isEmpty()) {
                         log.warn("Gemini API key is not configured. Running chat in fallback mode.");
                         return "[MOCK MODE] AI is not configured yet. I can continue the interview with fallback responses. Tell me your approach, and I’ll guide the next step.";
-                }
-
-                if (session.getCurrentPhase() == PhaseType.DSA) {
-                        try {
-                                String problemJson = session.getDsaProblemJson();
-                                if (problemJson != null && !problemJson.isBlank()) {
-                                        DsaProblem problem = objectMapper.readValue(problemJson, DsaProblem.class);
-
-                                        List<ChatMessage> history = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId());
-                                        String lastAiMsg = "Please explain your approach and how you plan to solve the problem.";
-                                        for (int i = history.size() - 1; i >= 0; i--) {
-                                                if (history.get(i).getRole() == Role.AI) {
-                                                        lastAiMsg = history.get(i).getContent();
-                                                        break;
-                                                }
-                                        }
-
-                                        List<CodeSubmission> submissions = codeSubmissionRepository.findBySessionIdOrderBySubmittedAtDesc(session.getId());
-                                        String code = "No code written yet.";
-                                        String language = "Java";
-                                        String runStatus = "Not run yet.";
-                                        if (!submissions.isEmpty()) {
-                                                CodeSubmission latest = submissions.get(0);
-                                                code = latest.getCode() != null ? latest.getCode() : "";
-                                                language = latest.getLanguage() != null ? latest.getLanguage() : "Java";
-                                                if (latest.getTestResultsJson() != null) {
-                                                        runStatus = "Tests run completed.";
-                                                }
-                                        }
-
-                                        String prompt = dsaFollowupEvalTemplate
-                                                        .replace("{problemTitle}", problem.getTitle())
-                                                        .replace("{language}", language)
-                                                        .replace("{code}", code)
-                                                        .replace("{runStatus}", runStatus)
-                                                        .replace("{followUpQuestion}", lastAiMsg)
-                                                        .replace("{candidateAnswer}", userMessage);
-
-                                        ChatRequest chatRequest = ChatRequest.builder()
-                                                        .messages(List.of(UserMessage.from(prompt)))
-                                                        .build();
-
-                                        String response = chatLanguageModel.get().chat(chatRequest).aiMessage().text();
-                                        String cleanJson = extractJson(response);
-
-                                        DsaFollowupEvalResponse eval = objectMapper.readValue(cleanJson, DsaFollowupEvalResponse.class);
-
-                                        String reply = "";
-                                        if (eval.getEvaluation() != null && !eval.getEvaluation().equalsIgnoreCase("null")) {
-                                                reply += eval.getEvaluation() + " ";
-                                        }
-                                        if (eval.getNextFollowUp() != null && !eval.getNextFollowUp().equalsIgnoreCase("null")) {
-                                                reply += eval.getNextFollowUp();
-                                        }
-
-                                        reply = reply.trim();
-                                        if (!reply.isEmpty()) {
-                                                return reply;
-                                        }
-                                }
-                        } catch (Exception e) {
-                                log.warn("Failed structured DSA follow-up evaluation, falling back to standard prompt.", e);
-                        }
                 }
 
                 String systemPrompt = buildSystemPrompt(session);
@@ -243,14 +208,13 @@ public class ChatService {
                 String difficulty = session.getDifficulty() != null ? session.getDifficulty().name() : "UNKNOWN";
                 PhaseType phase = session.getCurrentPhase();
                 int duration = getDurationForPhase(session, phase);
-
                 // Replace placeholders in base context
                 String baseContext = replacePlaceholders(baseContextTemplate, Map.of(
                                 "company", company,
                                 "difficulty", difficulty,
                                 "phase", phase.name(),
-                                "duration", String.valueOf(duration),
-                "candidateName", session.getUser() != null ? String.valueOf(session.getUser().getId()) : "Candidate"));
+                                "candidateName", session.getUser().getName() != null ? session.getUser().getName() : "Candidate",
+                                "duration", String.valueOf(duration)));
 
                 // Replace placeholders in phase-specific template
                 String phasePrompt = switch (phase) {
@@ -260,9 +224,9 @@ public class ChatService {
                                         "resumeJson", resumeJson));
                         case DSA -> {
                                 String problemInfo = "";
-                                if (session.getReportJson() != null && !session.getReportJson().isEmpty()) {
+                                if (session.getDsaProblemJson() != null && !session.getDsaProblemJson().isEmpty()) {
                                         try {
-                                                DsaProblem problem = objectMapper.readValue(session.getReportJson(),
+                                                DsaProblem problem = objectMapper.readValue(session.getDsaProblemJson(),
                                                                 DsaProblem.class);
                                                 problemInfo = "\n=== CURRENT PROBLEM ===\nYou are conducting an interview for this specific problem:\n"
                                                                 + "Title: " + problem.getTitle() + "\n"
@@ -287,7 +251,69 @@ public class ChatService {
                                         "resumeJson", resumeJson));
                 };
 
-                return baseContext + "\n" + phasePrompt;
+                String historyContext = buildHistoryContext(session.getUser().getId());
+
+                return baseContext + "\n" + historyContext + "\n" + phasePrompt;
+        }
+
+        private String buildHistoryContext(Long userId) {
+                List<InterviewSession> sessions = sessionRepository.findByUserIdOrderByStartedAtDesc(userId).stream()
+                                .filter(s -> s.getStatus() == SessionStatus.COMPLETED && s.getTotalScore() != null)
+                                .collect(java.util.stream.Collectors.toList());
+
+                if (sessions.isEmpty()) {
+                        return "\n=== CANDIDATE LONG-TERM CONTEXT ===\nNo historical interviews completed. This is the candidate's first session.";
+                }
+
+                double avg = sessions.stream().mapToInt(InterviewSession::getTotalScore).average().orElse(0);
+                int max = sessions.stream().mapToInt(InterviewSession::getTotalScore).max().orElse(0);
+
+                StringBuilder history = new StringBuilder("\n=== CANDIDATE LONG-TERM CONTEXT ===\n");
+                history.append("Total mock interviews completed: ").append(sessions.size()).append("\n");
+                history.append("Average Score: ").append(String.format("%.1f", avg)).append("/100\n");
+                history.append("Highest Score: ").append(max).append("/100\n");
+
+                // Extract key feedback/improvement areas from the latest completed session
+                InterviewSession lastSession = sessions.get(0);
+                if (lastSession.getReportJson() != null) {
+                        try {
+                                com.fasterxml.jackson.databind.JsonNode report = objectMapper.readTree(lastSession.getReportJson());
+                                java.util.Iterator<java.util.Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = report.fields();
+                                StringBuilder weaknessesBuilder = new StringBuilder();
+                                StringBuilder strengthsBuilder = new StringBuilder();
+                                
+                                while (fields.hasNext()) {
+                                        java.util.Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> field = fields.next();
+                                        com.fasterxml.jackson.databind.JsonNode phaseEval = field.getValue();
+                                        
+                                        com.fasterxml.jackson.databind.JsonNode weaknesses = phaseEval.path("weaknesses");
+                                        if (weaknesses.isArray()) {
+                                                for (com.fasterxml.jackson.databind.JsonNode node : weaknesses) {
+                                                        weaknessesBuilder.append(" - [").append(field.getKey()).append("] ").append(node.asText()).append("\n");
+                                                }
+                                        }
+                                        
+                                        com.fasterxml.jackson.databind.JsonNode strengths = phaseEval.path("strengths");
+                                        if (strengths.isArray()) {
+                                                for (com.fasterxml.jackson.databind.JsonNode node : strengths) {
+                                                        strengthsBuilder.append(" - [").append(field.getKey()).append("] ").append(node.asText()).append("\n");
+                                                }
+                                        }
+                                }
+                                
+                                if (strengthsBuilder.length() > 0) {
+                                        history.append("Past Strengths:\n").append(strengthsBuilder);
+                                }
+                                if (weaknessesBuilder.length() > 0) {
+                                        history.append("Past Areas to Improve (Weaknesses):\n").append(weaknessesBuilder);
+                                }
+                        } catch (Exception e) {
+                                // Ignore parsing errors
+                        }
+                }
+
+                history.append("\nINTERVIEWER INSTRUCTION: Use this historical performance context to guide your evaluation. Focus on testing if the candidate has addressed their past areas to improve (especially weaknesses in code, structure, or communication) without explicitly saying 'In your last interview...'. Challenge them constructively to show growth.");
+                return history.toString();
         }
 
         private String buildSubmissionContext(InterviewSession session) {
@@ -338,271 +364,8 @@ public class ChatService {
                 return switch (phase) {
                         case RESUME_SCREEN -> session.getResumeDurationMins();
                         case DSA -> session.getDsaDurationMins();
-                        case SYSTEM_DESIGN -> 0;
+                        case SYSTEM_DESIGN -> session.getSystemDesignDurationMins();
                         case HR -> session.getHrDurationMins();
                 };
         }
-
-        public void triggerAsyncCodeFeedback(Long sessionId, String code, String language, com.mockmate.dto.code.ExecutionResult runResult) {
-                java.util.concurrent.CompletableFuture.runAsync(() -> {
-                        try {
-                                Thread.sleep(1500); // Wait for the frontend to render compile/test result first
-
-                                InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
-                                                .orElseThrow(() -> new RuntimeException("Interview session not found"));
-
-                                if (session.getStatus() == SessionStatus.COMPLETED || chatLanguageModel.isEmpty()) {
-                                        return;
-                                }
-
-                                String problemJson = session.getDsaProblemJson();
-                                if (problemJson == null || problemJson.isBlank()) {
-                                        return;
-                                }
-                                DsaProblem problem = objectMapper.readValue(problemJson, DsaProblem.class);
-
-                                long elapsed = 0;
-                                if (session.getStartedAt() != null) {
-                                        elapsed = java.time.Duration.between(session.getStartedAt(), java.time.LocalDateTime.now()).toMinutes();
-                                }
-
-                                String testCaseDetails = "Test cases detail:\n";
-                                if (runResult.getResults() != null && !runResult.getResults().isEmpty()) {
-                                        for (int i = 0; i < runResult.getResults().size(); i++) {
-                                                var r = runResult.getResults().get(i);
-                                                testCaseDetails += "Test Case " + (i + 1) + ": Input: " + r.getInput() + " | Expected: " + r.getExpectedOutput() + " | Actual: " + r.getActualOutput() + " | Status: " + r.getStatus() + "\n";
-                                        }
-                                } else {
-                                        testCaseDetails += runResult.getCompileError() != null ? runResult.getCompileError() : "None";
-                                }
-
-                                String prompt = dsaAnalysisTemplate
-                                                .replace("{problemTitle}", problem.getTitle())
-                                                .replace("{problemDescription}", problem.getDescription())
-                                                .replace("{difficulty}", session.getDifficulty() != null ? session.getDifficulty().name() : "MEDIUM")
-                                                .replace("{language}", language)
-                                                .replace("{timeElapsed}", String.valueOf(elapsed))
-                                                .replace("{code}", code)
-                                                .replace("{runStatus}", runResult.isCompiled() ? (runResult.isAllPassed() ? "PASSED" : "FAILED") : "COMPILATION_ERROR")
-                                                .replace("{testCaseDetails}", testCaseDetails);
-
-                                ChatRequest chatRequest = ChatRequest.builder()
-                                                .messages(List.of(UserMessage.from(prompt)))
-                                                .build();
-                                String response = chatLanguageModel.get().chat(chatRequest).aiMessage().text();
-                                String cleanJson = extractJson(response);
-
-                                DsaAnalysisResponse analysis = objectMapper.readValue(cleanJson, DsaAnalysisResponse.class);
-
-                                // Update complexity if detected
-                                if (analysis.getComplexity() != null) {
-                                        String time = analysis.getComplexity().getTime();
-                                        String space = analysis.getComplexity().getSpace();
-                                        List<CodeSubmission> submissions = codeSubmissionRepository
-                                                        .findBySessionIdOrderBySubmittedAtDesc(session.getId());
-                                        if (!submissions.isEmpty()) {
-                                                CodeSubmission latest = submissions.get(0);
-                                                if (time != null && !time.equalsIgnoreCase("null") && !time.isBlank()) {
-                                                        latest.setTimeComplexity(time);
-                                                }
-                                                if (space != null && !space.equalsIgnoreCase("null") && !space.isBlank()) {
-                                                        latest.setSpaceComplexity(space);
-                                                }
-                                                codeSubmissionRepository.save(latest);
-                                        }
-                                }
-
-                                String aiResponseText = "";
-                                if (analysis.getFeedback() != null && !analysis.getFeedback().isBlank()) {
-                                        aiResponseText += analysis.getFeedback() + " ";
-                                }
-                                if (analysis.getHint() != null && !analysis.getHint().isBlank() && !analysis.getHint().equalsIgnoreCase("null")) {
-                                        aiResponseText += analysis.getHint() + " ";
-                                }
-                                if (analysis.getFollowUp() != null && !analysis.getFollowUp().isBlank() && !analysis.getFollowUp().equalsIgnoreCase("null")) {
-                                        aiResponseText += analysis.getFollowUp();
-                                }
-                                aiResponseText = aiResponseText.trim();
-
-                                if (aiResponseText.isEmpty()) {
-                                        return;
-                                }
-
-                                ChatMessage aiMsg = new ChatMessage();
-                                aiMsg.setSession(session);
-                                aiMsg.setRole(Role.AI);
-                                aiMsg.setContent(aiResponseText);
-                                aiMsg.setPhaseType(session.getCurrentPhase());
-                                chatMessageRepository.save(aiMsg);
-
-                                simpMessagingTemplate.convertAndSend(
-                                                "/topic/session/" + sessionId,
-                                                com.mockmate.dto.ws.WsEvent.message(aiResponseText));
-
-                                log.info("Live code run feedback broadcasted for session {}", sessionId);
-
-                        } catch (Exception e) {
-                                log.error("Failed to generate live code feedback", e);
-                        }
-                });
-        }
-
-        public void triggerAsyncCodeDraftFeedback(Long sessionId, String code, String language) {
-                java.util.concurrent.CompletableFuture.runAsync(() -> {
-                        try {
-                                List<ChatMessage> history = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
-                                if (!history.isEmpty()) {
-                                        ChatMessage lastMsg = history.get(history.size() - 1);
-                                        if (lastMsg.getRole() == Role.AI && lastMsg.getCreatedAt() != null) {
-                                                java.time.Duration age = java.time.Duration.between(lastMsg.getCreatedAt(), java.time.LocalDateTime.now());
-                                                if (age.getSeconds() < 60) {
-                                                        return;
-                                                }
-                                        }
-                                }
-
-                                InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
-                                                .orElseThrow(() -> new RuntimeException("Interview session not found"));
-
-                                if (session.getStatus() == SessionStatus.COMPLETED || chatLanguageModel.isEmpty()) {
-                                        return;
-                                }
-
-                                String problemJson = session.getDsaProblemJson();
-                                if (problemJson == null || problemJson.isBlank()) {
-                                        return;
-                                }
-                                DsaProblem problem = objectMapper.readValue(problemJson, DsaProblem.class);
-
-                                long elapsed = 0;
-                                if (session.getStartedAt() != null) {
-                                        elapsed = java.time.Duration.between(session.getStartedAt(), java.time.LocalDateTime.now()).toMinutes();
-                                }
-
-                                String prompt = dsaAnalysisTemplate
-                                                .replace("{problemTitle}", problem.getTitle())
-                                                .replace("{problemDescription}", problem.getDescription())
-                                                .replace("{difficulty}", session.getDifficulty() != null ? session.getDifficulty().name() : "MEDIUM")
-                                                .replace("{language}", language)
-                                                .replace("{timeElapsed}", String.valueOf(elapsed))
-                                                .replace("{code}", code)
-                                                .replace("{runStatus}", "In Progress (Draft)")
-                                                .replace("{testCaseDetails}", "No execution results available yet. The candidate is actively editing code.");
-
-                                ChatRequest chatRequest = ChatRequest.builder()
-                                                .messages(List.of(UserMessage.from(prompt)))
-                                                .build();
-                                String response = chatLanguageModel.get().chat(chatRequest).aiMessage().text();
-                                String cleanJson = extractJson(response);
-
-                                DsaAnalysisResponse analysis = objectMapper.readValue(cleanJson, DsaAnalysisResponse.class);
-
-                                if (analysis.getSeverity() != null && analysis.getSeverity().equalsIgnoreCase("none")) {
-                                        return;
-                                }
-
-                                String aiResponseText = "";
-                                if (analysis.getFeedback() != null && !analysis.getFeedback().isBlank()) {
-                                        aiResponseText += analysis.getFeedback() + " ";
-                                }
-                                if (analysis.getHint() != null && !analysis.getHint().isBlank() && !analysis.getHint().equalsIgnoreCase("null")) {
-                                        aiResponseText += analysis.getHint() + " ";
-                                }
-                                if (analysis.getFollowUp() != null && !analysis.getFollowUp().isBlank() && !analysis.getFollowUp().equalsIgnoreCase("null")) {
-                                        aiResponseText += analysis.getFollowUp();
-                                }
-                                aiResponseText = aiResponseText.trim();
-
-                                if (aiResponseText.isEmpty()) {
-                                        return;
-                                }
-
-                                ChatMessage aiMsg = new ChatMessage();
-                                aiMsg.setSession(session);
-                                aiMsg.setRole(Role.AI);
-                                aiMsg.setContent(aiResponseText);
-                                aiMsg.setPhaseType(session.getCurrentPhase());
-                                chatMessageRepository.save(aiMsg);
-
-                                simpMessagingTemplate.convertAndSend(
-                                                "/topic/session/" + sessionId,
-                                                com.mockmate.dto.ws.WsEvent.message(aiResponseText));
-
-                                log.info("Live code draft feedback broadcasted for session {}", sessionId);
-
-                        } catch (Exception e) {
-                                log.error("Failed to generate live code draft feedback", e);
-                        }
-                });
-        }
-
-        @Transactional
-        public void persistDraftSubmission(Long sessionId, String language, String code) {
-                try {
-                        InterviewSession session = sessionRepository.findByIdWithUser(sessionId)
-                                        .orElseThrow(() -> new RuntimeException("Interview session not found"));
-
-                        List<CodeSubmission> submissions = codeSubmissionRepository
-                                        .findBySessionIdOrderBySubmittedAtDesc(sessionId);
-
-                        CodeSubmission submission;
-                        if (!submissions.isEmpty()
-                                        && (submissions.get(0).getSubmitted() == null || !submissions.get(0).getSubmitted())) {
-                                submission = submissions.get(0);
-                        } else {
-                                submission = new CodeSubmission();
-                                submission.setSession(session);
-                                submission.setHintsUsed(0);
-                        }
-
-                        submission.setLanguage(language);
-                        submission.setCode(code);
-                        submission.setSubmitted(false);
-                        submission.setSubmittedAt(java.time.LocalDateTime.now());
-
-                        codeSubmissionRepository.save(submission);
-                } catch (Exception e) {
-                        log.error("Failed to persist draft submission", e);
-                }
-        }
-
-        private String extractJson(String text) {
-                if (text == null)
-                        return null;
-
-                int firstBrace = text.indexOf('{');
-                int lastBrace = text.lastIndexOf('}');
-
-                if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
-                        return text.substring(firstBrace, lastBrace + 1);
-                }
-
-                return text.replaceAll("```json", "").replaceAll("```", "").trim();
-        }
-
-        @lombok.Data
-        @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
-        public static class DsaAnalysisResponse {
-                private String feedback;
-                private String hint;
-                private String followUp;
-                private Complexity complexity;
-                private String severity;
-
-                @lombok.Data
-                @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
-                public static class Complexity {
-                        private String time;
-                        private String space;
-                }
-        }
-
-        @lombok.Data
-        @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
-        public static class DsaFollowupEvalResponse {
-                private String evaluation;
-                private String nextFollowUp;
-                private boolean shouldProceed;
-        }
 }
-

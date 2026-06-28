@@ -1,25 +1,16 @@
 package com.mockmate.service;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import java.util.Optional;
 
 @Service
 public class GeminiParsingService {
 
     private final ChatLanguageModel chatModel;
 
-    public GeminiParsingService(@Value("${langchain4j.googleai.gemini.api-key:}") String apiKey) {
-        if (apiKey != null && !apiKey.isEmpty()) {
-            this.chatModel = GoogleAiGeminiChatModel.builder()
-                    .apiKey(apiKey)
-                    .modelName("gemini-3.5-flash")
-                    .temperature(0.1) // Low temperature for factual extraction
-                    .build();
-        } else {
-            this.chatModel = null;
-        }
+    public GeminiParsingService(Optional<ChatLanguageModel> chatLanguageModel) {
+        this.chatModel = chatLanguageModel.orElse(null);
     }
 
     public String parseResume(String rawText) {

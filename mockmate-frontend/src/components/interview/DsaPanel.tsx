@@ -1,9 +1,8 @@
 import { useState, useEffect, lazy } from 'react';
-import { Play, CheckCircle2, Loader2, Lightbulb } from 'lucide-react';
+import { Play, CheckCircle2, Loader2, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
 import { codeService } from '../../services/codeService';
 import { useInterviewStore } from '../../store/interviewStore';
-import { useWebSocket } from '../../hooks/useWebSocket';
-import type { DsaProblem } from '../../types';
+import { useInterviewRealtime } from '../../realtime/useInterviewRealtime';
 
 const Editor = lazy(() => import('@monaco-editor/react'));
 
@@ -32,51 +31,65 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
         submitted: isSubmitted,
         setSubmitted: setIsSubmitted
     } = useInterviewStore();
-    const [activeTab, setActiveTab] = useState<'output' | 'testcases' | 'evaluation'>('testcases');
-    const [customTestCases, setCustomTestCases] = useState<string>('');
-    const [hintText, setHintText] = useState<string | null>(null);
-    const [isLoadingHint, setIsLoadingHint] = useState(false);
 
-    // const leftRef = useRef<HTMLDivElement>(null);
-
-    const startResizeLeft = (e: React.MouseEvent) => {
-        e.preventDefault();
-        const startX = e.clientX;
-        const leftEl = document.getElementById('dsa-left-panel');
-        const containerEl = document.getElementById('dsa-container');
-        if (!leftEl || !containerEl) return;
-
-        const startWidth = leftEl.getBoundingClientRect().width;
-        const containerWidth = containerEl.getBoundingClientRect().width;
-
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            const deltaX = moveEvent.clientX - startX;
-            const newWidthPercent = ((startWidth + deltaX) / containerWidth) * 100;
-            const clampedWidth = Math.min(Math.max(newWidthPercent, 20), 70);
-            leftEl.style.width = `${clampedWidth}%`;
-        };
-
-        const handleMouseUp = () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    };
-
-    const { sendCodeDraft } = useWebSocket(sessionId);
-    const [isFetching, setIsFetching] = useState(false);
+    const { sendCodeDraft } = useInterviewRealtime();
 
     useEffect(() => {
         if (!code || isSubmitted) return;
 
         const timer = setTimeout(() => {
             sendCodeDraft(code, language);
-        }, 30000); // 30 seconds debounce to send code drafts passively
+        }, 1000);
 
         return () => clearTimeout(timer);
     }, [code, language, isSubmitted, sendCodeDraft]);
+
+    const [leftWidth, setLeftWidth] = useState(35); // percentage
+    const [activeTab, setActiveTab] = useState<'output' | 'testcases' | 'evaluation'>('testcases');
+    const [customTestCases, setCustomTestCases] = useState<string>('');
+    const [isResizing, setIsResizing] = useState(false);
+    const [hintText, setHintText] = useState<string | null>(null);
+    const [isLoadingHint, setIsLoadingHint] = useState(false);
+    const [showFailedOnly, setShowFailedOnly] = useState(false);
+    const [expandedCases, setExpandedCases] = useState<Record<number, boolean>>({});
+    const [isResultBarCollapsed, setIsResultBarCollapsed] = useState(false);
+
+    useEffect(() => {
+        if (output?.results) {
+            const initialExpanded: Record<number, boolean> = {};
+            output.results.forEach((_, idx) => {
+                initialExpanded[idx] = true;
+            });
+            setExpandedCases(initialExpanded);
+        }
+        setShowFailedOnly(false);
+    }, [output]);
+
+    const toggleCase = (index: number) => {
+        setExpandedCases(prev => ({
+            ...prev,
+            [index]: !prev[index]
+        }));
+    };
+
+    useEffect(() => {
+        if (isResizing) {
+            const handleMouseMove = (e: MouseEvent) => {
+                const newWidth = (e.clientX / window.innerWidth) * 100;
+                if (newWidth > 20 && newWidth < 70) {
+                    setLeftWidth(newWidth);
+                }
+            };
+            const handleMouseUp = () => setIsResizing(false);
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isResizing]);
+    const [isFetching, setIsFetching] = useState(false);
 
     useEffect(() => {
         if (!problem && sessionId) {
@@ -85,16 +98,6 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                 try {
                     const data = await codeService.getProblem(sessionId);
                     setProblem(data.problem);
-                    if (data.problem) {
-                        const langKey = `${language}StarterCode` as keyof DsaProblem;
-                        if (data.problem[langKey]) {
-                            setCode(data.problem[langKey] as string);
-                        } else {
-                            if (!code) {
-                                setCode(getDefaultCode(language));
-                            }
-                        }
-                    }
                     if (data.submitted) {
                         setIsSubmitted(true);
                         setEvaluation(data.evaluation);
@@ -110,32 +113,8 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
         }
     }, [sessionId, problem]);
 
-    const getDefaultCode = (lang: string) => {
-        if (lang === 'java') {
-            return 'import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n        \n    }\n}';
-        }
-        if (lang === 'python') {
-            return 'import sys\n\ndef main():\n    # Write your solution here\n    pass\n\nif __name__ == \'__main__\':\n    main()';
-        }
-        if (lang === 'cpp') {
-            return '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    return 0;\n}';
-        }
-        if (lang === 'javascript') {
-            return 'const fs = require(\'fs\');\n\nfunction main() {\n    const input = fs.readFileSync(0, \'utf-8\');\n    // Write your solution here\n    \n}\n\nmain();';
-        }
-        return '// Start coding here...\n';
-    };
-
     const handleLanguageChange = (newLang: string) => {
         setLanguage(newLang);
-        if (problem) {
-            const langKey = `${newLang}StarterCode` as keyof DsaProblem;
-            if (problem[langKey]) {
-                setCode(problem[langKey] as string);
-                return;
-            }
-        }
-        setCode(getDefaultCode(newLang));
     };
 
     const handleHint = async () => {
@@ -175,21 +154,17 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
             }
         } catch (err: any) {
             console.error('Code execution failed:', err);
-            // If we get a 400 with "Coding actions are only available during the active DSA phase", 
-            // it likely means the session ended or phase changed. Trigger a store refresh.
-            if (err.response?.status === 400) {
-                const { fetchSession } = (await import('../../store/sessionStore')).useSessionStore.getState();
-                fetchSession(sessionId);
-            }
             if (!isSubmit) {
                 setOutput({
                     compiled: false,
-                    compileError: err.response?.data?.message || 'A network or server error occurred during code execution.',
+                    compileError: 'A network or server error occurred during code execution.',
                     results: [],
                     passedCount: 0,
                     totalCount: 0,
                     allPassed: false
                 });
+            } else {
+                alert('Code submission failed: ' + (err.message || 'Unknown server error'));
             }
         } finally {
             setStatus(false);
@@ -210,13 +185,83 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
         );
     }
 
+    const renderOutputContent = () => {
+        if (output?.compileError) {
+            return <>{output.compileError}</>;
+        }
+
+        if (output?.results?.[0]?.actualOutput) {
+            return (
+                <div className="space-y-6">
+                    {output.results.map((res, i) => {
+                        if (showFailedOnly && res.passed) return null;
+                        const caseExpanded = expandedCases[i] !== false;
+
+                        return (
+                            <div key={i} className="animate-in slide-in-from-left-2 duration-300 border border-white/5 bg-white/[0.01] rounded-xl overflow-hidden mb-4">
+                                <button
+                                    onClick={() => toggleCase(i)}
+                                    className="w-full flex items-center justify-between p-3 hover:bg-white/[0.03] transition-colors text-left"
+                                >
+                                    <div className="flex items-center space-x-2">
+                                        <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">
+                                            {"Test Case "}{i + 1}
+                                        </span>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${res.passed ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'}`}>
+                                            {res.passed ? 'PASSED' : 'FAILED'}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <span className="text-[9px] font-mono text-text-tertiary">{res.executionTimeMs}ms</span>
+                                        <span className="text-text-tertiary text-xs">{caseExpanded ? '\u25BC' : '\u25B6'}</span>
+                                    </div>
+                                </button>
+
+                                {caseExpanded && (
+                                    <div className="p-3 border-t border-white/5 bg-[#121212]/30 space-y-3 font-mono text-[12px]">
+                                        <div className="bg-white/[0.03] border border-white/10 rounded-lg overflow-hidden">
+                                            <div className="px-3 py-1 bg-white/[0.05] border-b border-white/10 text-[9px] text-text-tertiary uppercase font-bold">Input</div>
+                                            <div className="p-3 text-white/90 whitespace-pre-wrap break-all">{res.input || '(no input)'}</div>
+                                        </div>
+
+                                        <div className="bg-[#0a0a0a] border border-white/5 rounded-lg overflow-hidden shadow-inner">
+                                            <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Your Output</div>
+                                            <div className={`p-3 whitespace-pre-wrap break-all ${res.passed ? 'text-success/80' : 'text-danger/80'}`}>
+                                                {res.actualOutput || (res.error
+                                                    ? <span className="text-danger italic">{"Runtime Error: "}{res.error}</span>
+                                                    : '(no output)'
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {!res.passed && !res.error && (
+                                            <div className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
+                                                <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Expected Output</div>
+                                                <div className="p-3 text-text-tertiary whitespace-pre-wrap break-all">{res.expectedOutput}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        }
+
+        if (isSubmitted) {
+            return <span>{"Code submitted successfully. View detailed evaluation in the 'Evaluation' tab."}</span>;
+        }
+
+        return <span>{"Click 'Run Code' to see execution output."}</span>;
+    };
+
     return (
-        <div id="dsa-container" className="flex-1 h-full flex flex-row bg-transparent overflow-hidden animate-in fade-in zoom-in-95 duration-500 relative">
+        <div className="flex-1 h-full flex flex-row bg-transparent overflow-hidden animate-in fade-in zoom-in-95 duration-500 relative">
 
             {/* Left Column: Problem Description */}
             <div
-                id="dsa-left-panel"
-                style={{ width: `35%` }}
+                style={{ width: `${leftWidth}%` }}
                 className="flex flex-col bg-bg-surface border border-border rounded-xl shadow-sm overflow-hidden min-w-[250px]"
             >
                 <div className="p-5 border-b border-border bg-bg-subtle shrink-0">
@@ -238,20 +283,6 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                     <div className="prose prose-sm text-[14px] text-text-secondary max-w-none mb-6 leading-relaxed">
                         {problem.description}
                     </div>
-
-                    {problem.inputFormat && (
-                        <div className="mb-6">
-                            <h4 className="font-semibold text-xs text-text-primary uppercase tracking-wider mb-2">Input Format</h4>
-                            <div className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">{problem.inputFormat}</div>
-                        </div>
-                    )}
-
-                    {problem.outputFormat && (
-                        <div className="mb-6">
-                            <h4 className="font-semibold text-xs text-text-primary uppercase tracking-wider mb-2">Output Format</h4>
-                            <div className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">{problem.outputFormat}</div>
-                        </div>
-                    )}
 
                     {problem.constraints && problem.constraints.length > 0 && (
                         <div className="mb-6">
@@ -290,8 +321,8 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
 
             {/* Resize Divider */}
             <div
-                onMouseDown={startResizeLeft}
-                className="w-1.5 h-full cursor-col-resize hover:bg-violet/30 transition-colors flex items-center justify-center group z-10"
+                onMouseDown={() => setIsResizing(true)}
+                className={`w-1.5 h-full cursor-col-resize hover:bg-violet/30 transition-colors flex items-center justify-center group ${isResizing ? 'bg-violet/50' : ''}`}
             >
                 <div className="w-0.5 h-8 bg-border group-hover:bg-violet/50 rounded-full" />
             </div>
@@ -373,7 +404,11 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                 </div>
 
                 {/* Bottom Panel: Output & Test Cases */}
-                <div className="flex-1 flex flex-col bg-[#161616] border-t border-border overflow-hidden min-h-[250px]">
+                <div className={`flex flex-col bg-[#161616] border-t border-border overflow-hidden transition-all duration-300 ${
+                    isResultBarCollapsed 
+                        ? 'h-[40px] min-h-[40px] flex-none' 
+                        : 'flex-1 min-h-[250px]'
+                }`}>
                     {/* Tab Header */}
                     <div className="px-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between shrink-0">
                         <div className="flex items-center">
@@ -403,12 +438,38 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                         </div>
                         {activeTab === 'output' && output && (
                             <div className="flex items-center space-x-3 pr-2">
+                                {output.results?.some(res => !res.passed) && (
+                                    <button
+                                        onClick={() => setShowFailedOnly(prev => !prev)}
+                                        className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border transition-all ${
+                                            showFailedOnly
+                                                ? 'bg-danger/20 border-danger text-danger font-bold'
+                                                : 'bg-white/5 border-white/10 text-text-secondary hover:bg-white/10'
+                                        }`}
+                                    >
+                                        {showFailedOnly ? 'Showing Failed' : 'Filter Failed'}
+                                    </button>
+                                )}
                                 <span className="text-[10px] font-mono text-text-tertiary">{output.results?.[0]?.executionTimeMs || 0}ms</span>
                                 {output.allPassed ? (
-                                    <span className="text-[10px] font-bold text-success uppercase tracking-widest px-2 py-0.5 bg-success/10 rounded-full">Accepted</span>
+                                    <span className="text-[10px] font-bold text-success uppercase tracking-widest px-2 py-0.5 bg-success/10 rounded-full">Passed</span>
                                 ) : (
                                     <span className="text-[10px] font-bold text-danger uppercase tracking-widest px-2 py-0.5 bg-danger/10 rounded-full">Failed</span>
                                 )}
+                            </div>
+                        )}
+                        {activeTab === 'testcases' && output && output.results?.some(res => !res.passed) && (
+                            <div className="flex items-center space-x-3 pr-2 animate-in fade-in duration-300">
+                                <button
+                                    onClick={() => setShowFailedOnly(prev => !prev)}
+                                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border transition-all ${
+                                        showFailedOnly
+                                            ? 'bg-danger/20 border-danger text-danger font-bold'
+                                            : 'bg-white/5 border-white/10 text-text-secondary hover:bg-white/10'
+                                    }`}
+                                >
+                                    {showFailedOnly ? 'Showing Failed' : 'Filter Failed'}
+                                </button>
                             </div>
                         )}
                         {activeTab === 'evaluation' && evaluation && (
@@ -416,38 +477,64 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                                 <span className="text-[10px] font-bold text-violet uppercase tracking-widest px-2 py-0.5 bg-violet/10 rounded-full">Score: {evaluation.overallScore}/100</span>
                             </div>
                         )}
+                        <div className="flex items-center space-x-2 pl-2 border-l border-white/5">
+                            <button
+                                onClick={() => setIsResultBarCollapsed(prev => !prev)}
+                                className="p-1 text-text-tertiary hover:text-text-secondary hover:bg-white/5 rounded transition-all"
+                                title={isResultBarCollapsed ? "Expand Panel" : "Collapse Panel"}
+                            >
+                                {isResultBarCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Tab Content */}
-                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    {!isResultBarCollapsed && (
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                         {activeTab === 'testcases' ? (
                             <div className="space-y-6">
-                                {problem.examples && problem.examples.map((ex, i) => (
-                                    <div key={i} className="animate-in slide-in-from-left-2 duration-300">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-[11px] font-bold text-text-tertiary uppercase">Case {i + 1}</span>
-                                            {output && output.results?.[i] && (
-                                                <span className={`text-[10px] font-bold ${output.results[i].passed ? 'text-success' : 'text-danger'}`}>
-                                                    {output.results[i].status ? `✓ ${output.results[i].status}` : (output.results[i].passed ? '✓ Accepted' : '✗ Wrong Answer')}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="bg-white/5 border border-white/10 rounded-lg p-3">
-                                                <div className="text-[10px] text-text-tertiary mb-1 uppercase">Input</div>
-                                                <div className="font-mono text-xs text-white/90">{ex.input}</div>
-                                            </div>
-                                            {output && output.results?.[i] && (
-                                                <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
-                                                    <div className="text-[10px] text-text-tertiary mb-1 uppercase">Actual Output</div>
-                                                    <div className={`font-mono text-xs ${output.results[i].passed ? 'text-success/90' : 'text-danger/90'}`}>
-                                                        {output.results[i].actualOutput}
+                                {problem.examples && problem.examples.map((ex, i) => {
+                                    const res = output?.results?.[i];
+                                    if (showFailedOnly && res && res.passed) return null;
+
+                                    const isExpanded = expandedCases[i] !== false;
+
+                                    return (
+                                        <div key={i} className="animate-in slide-in-from-left-2 duration-300 border border-white/5 bg-white/[0.01] rounded-xl overflow-hidden mb-4">
+                                            <button 
+                                                onClick={() => toggleCase(i)}
+                                                className="w-full flex items-center justify-between p-3 hover:bg-white/[0.03] transition-colors text-left"
+                                            >
+                                                <span className="text-[11px] font-bold text-text-secondary uppercase">Case {i + 1}</span>
+                                                <div className="flex items-center space-x-2">
+                                                    {res && (
+                                                        <span className={`text-[10px] font-bold ${res.passed ? 'text-success' : 'text-danger'}`}>
+                                                            {res.passed ? '✓ Passed' : '✗ Failed'}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-text-tertiary text-xs">{isExpanded ? '\u25BC' : '\u25B6'}</span>
+                                                </div>
+                                            </button>
+                                            
+                                            {isExpanded && (
+                                                <div className="p-3 border-t border-white/5 bg-[#121212]/30 space-y-2">
+                                                    <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+                                                        <div className="text-[10px] text-text-tertiary mb-1 uppercase">Input</div>
+                                                        <div className="font-mono text-xs text-white/90">{ex.input}</div>
                                                     </div>
+                                                    {res && (
+                                                        <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                                                            <div className="text-[10px] text-text-tertiary mb-1 uppercase">Actual Output</div>
+                                                            <div className={`font-mono text-xs ${res.passed ? 'text-success/90' : 'text-danger/90'}`}>
+                                                                {res.actualOutput}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
 
                                 {/* Custom Test Case Input */}
                                 <div className="mt-8 pt-6 border-t border-white/5">
@@ -459,7 +546,8 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                                         className="w-full h-32 bg-white/5 border border-white/10 rounded-xl p-4 font-mono text-xs text-white focus:outline-none focus:border-violet/50 transition-colors placeholder:text-text-tertiary/50"
                                     />
                                     <p className="mt-2 text-[10px] text-text-tertiary italic">
-                                        // This input will be used for the first test case during "Run Code".
+                                        {/* This input will be used for the first test case during "Run Code". */}
+                                        This input will be used for the first test case during &quot;Run Code&quot;.
                                     </p>
                                 </div>
                             </div>
@@ -499,55 +587,9 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                             </div>
                         ) : (
                             <pre className="font-mono text-[13px] text-white/95 whitespace-pre-wrap leading-relaxed animate-in fade-in duration-300">
-                                {output?.compileError || (output?.results && output.results.length > 0 ? (
-                                    <div className="space-y-6">
-                                                                        {output.results.map((res, i) => (
-                                            <div key={i} className="animate-in slide-in-from-left-2 duration-300">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="flex items-center space-x-2">
-                                                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
-                                                            Test Case {i + 1} {res.hidden && <span className="text-violet-light font-normal capitalize">(Hidden)</span>}
-                                                        </span>
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${res.passed ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'}`}>
-                                                            {res.status ? res.status.toUpperCase() : (res.passed ? 'ACCEPTED' : 'WRONG ANSWER')}
-                                                        </span>
-                                                    </div>
-                                                    <span className="text-[9px] font-mono text-text-tertiary">{res.executionTimeMs}ms</span>
-                                                </div>
-
-                                                {!res.hidden ? (
-                                                    <div className="space-y-3 font-mono text-[12px]">
-                                                        <div className="bg-white/[0.03] border border-white/10 rounded-lg overflow-hidden">
-                                                            <div className="px-3 py-1 bg-white/[0.05] border-b border-white/10 text-[9px] text-text-tertiary uppercase font-bold">Input</div>
-                                                            <div className="p-3 text-white/90 whitespace-pre-wrap break-all">{res.input || '<no-input>'}</div>
-                                                        </div>
-
-                                                        <div className="bg-[#0a0a0a] border border-white/5 rounded-lg overflow-hidden shadow-inner">
-                                                            <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Your Output</div>
-                                                            <div className={`p-3 whitespace-pre-wrap break-all ${res.passed ? 'text-success/80' : 'text-danger/80'}`}>
-                                                                {res.actualOutput || (res.error ? <span className="text-danger italic">Runtime Error: {res.error}</span> : '<no-output>')}
-                                                            </div>
-                                                        </div>
-
-                                                        {!res.passed && !res.error && (
-                                                            <div className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
-                                                                <div className="px-3 py-1 bg-white/[0.03] border-b border-white/5 text-[9px] text-text-tertiary uppercase font-bold">Expected Output</div>
-                                                                <div className="p-3 text-text-tertiary whitespace-pre-wrap break-all">{res.expectedOutput}</div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-[11px] font-mono text-text-tertiary italic pl-2 py-1">
-                                                        // Input and output details are hidden for privacy.
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : isSubmitted ? "Code submitted successfully. View detailed evaluation in the 'Evaluation' tab." : "Click 'Run Code' to see execution output.")}
+                                {renderOutputContent()}
                             </pre>
-                        )}
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

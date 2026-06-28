@@ -2,17 +2,15 @@ import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageBubble } from '../interview/MessageBubble';
-import { useSessionStore } from '../../store/sessionStore';
-import type { PhaseType } from '../../types';
+import type { ChatMessage, PhaseType } from '../../types';
 
 interface TranscriptAccordionProps {
-    sessionId: number;
     phases: PhaseType[];
+    messages: ChatMessage[];
 }
 
-export function TranscriptAccordion({ phases }: TranscriptAccordionProps) {
+export function TranscriptAccordion({ phases, messages }: TranscriptAccordionProps) {
     const [openPhase, setOpenPhase] = useState<PhaseType | null>(null);
-    const { messages } = useSessionStore();
 
     const togglePhase = (phase: PhaseType) => {
         setOpenPhase(openPhase === phase ? null : phase);

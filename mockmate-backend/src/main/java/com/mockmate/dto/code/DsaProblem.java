@@ -20,6 +20,11 @@ public class DsaProblem {
     private String javaStarterCode;
     private String pythonStarterCode;
     private String javascriptStarterCode;
+
+    // Optional generated harnesses retained server-side for backwards compatibility.
+    private String javaTestRunner;
+    private String pythonTestRunner;
+    private String javascriptTestRunner;
     
     // Universal Runner config
     private String methodSignature;

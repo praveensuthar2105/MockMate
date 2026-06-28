@@ -1,35 +1,19 @@
-import { useEffect } from 'react';
 import { Mic, MicOff } from 'lucide-react';
-import { useVoiceInput } from '../../hooks/useVoiceInput';
 
 interface VoiceMicButtonProps {
-    onTranscriptComplete: (text: string) => void;
+    isListening: boolean;
+    isSupported: boolean;
+    onClick: () => void;
     disabled?: boolean;
 }
 
-export function VoiceMicButton({ onTranscriptComplete, disabled = false }: VoiceMicButtonProps) {
-    const {
-        isListening,
-        transcript,
-        finalTranscript,
-        startListening,
-        stopListening,
-        isSupported,
-        resetTranscript
-    } = useVoiceInput();
-
-    useEffect(() => {
-        if (finalTranscript) {
-            onTranscriptComplete(finalTranscript);
-            resetTranscript();
-        }
-    }, [finalTranscript, onTranscriptComplete, resetTranscript]);
-
+export function VoiceMicButton({ isListening, isSupported, onClick, disabled = false }: VoiceMicButtonProps) {
     if (!isSupported) {
         return (
             <button
+                type="button"
                 disabled
-                className="p-2 rounded-xl bg-bg-subtle text-text-tertiary cursor-not-allowed opacity-50"
+                className="w-11 h-11 rounded-xl flex items-center justify-center bg-bg-subtle text-text-tertiary cursor-not-allowed opacity-50"
                 title="Voice input requires Chrome or Edge"
             >
                 <Mic size={20} />
@@ -37,19 +21,11 @@ export function VoiceMicButton({ onTranscriptComplete, disabled = false }: Voice
         );
     }
 
-    const handleClick = () => {
-        if (isListening) {
-            stopListening();
-        } else {
-            startListening();
-        }
-    };
-
     return (
         <div className="relative">
             <button
                 type="button"
-                onClick={handleClick}
+                onClick={onClick}
                 disabled={disabled}
                 className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300 relative z-10 ${isListening
                         ? 'bg-danger text-white shadow-lg shadow-danger/20'
@@ -66,17 +42,6 @@ export function VoiceMicButton({ onTranscriptComplete, disabled = false }: Voice
                     <Mic size={20} />
                 )}
             </button>
-
-            {/* Interim Transcript Overlay */}
-            {isListening && transcript && (
-                <div className="absolute bottom-full mb-4 right-0 w-[300px] animate-in slide-in-from-bottom-2 duration-300">
-                    <div className="bg-bg-surface/90 backdrop-blur-md border border-border p-3 rounded-xl shadow-xl">
-                        <p className="text-[13px] text-text-tertiary italic leading-relaxed">
-                            {transcript}...
-                        </p>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
