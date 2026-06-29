@@ -103,7 +103,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                         setEvaluation(data.evaluation);
                         setActiveTab('evaluation');
                     }
-                } catch (err) {
+                } catch (err: unknown) {
                     console.error('Failed to fetch problem:', err);
                 } finally {
                     setIsFetching(false);
@@ -111,7 +111,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
             };
             fetchProblem();
         }
-    }, [sessionId, problem]);
+    }, [sessionId, problem, setProblem, setEvaluation, setIsSubmitted]);
 
     const handleLanguageChange = (newLang: string) => {
         setLanguage(newLang);
@@ -152,7 +152,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                 setOutput(res);
                 setActiveTab('output');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Code execution failed:', err);
             if (!isSubmit) {
                 setOutput({
@@ -164,7 +164,8 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                     allPassed: false
                 });
             } else {
-                alert('Code submission failed: ' + (err.message || 'Unknown server error'));
+                const message = err instanceof Error ? err.message : 'Unknown server error';
+                alert('Code submission failed: ' + message);
             }
         } finally {
             setStatus(false);
@@ -193,7 +194,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
         if (output?.results?.[0]?.actualOutput) {
             return (
                 <div className="space-y-6">
-                    {output.results.map((res, i) => {
+                    {output?.results?.map((res, i) => {
                         if (showFailedOnly && res.passed) return null;
                         const caseExpanded = expandedCases[i] !== false;
 
@@ -302,7 +303,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                                 <div className="mb-1"><span className="text-text-tertiary">Input:</span> <span className="text-text-primary">{ex.input}</span></div>
                                 <div className="mb-1"><span className="text-text-tertiary">Output:</span> <span className="text-text-primary">{ex.output}</span></div>
                                 {ex.explanation && (
-                                    <div className="mt-2 text-text-tertiary italic">// {ex.explanation}</div>
+                                    <div className="mt-2 text-text-tertiary italic">{ex.explanation}</div>
                                 )}
                             </div>
                         </div>
@@ -381,7 +382,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                 <div className="flex-1 relative min-h-0 bg-[#0d0d0d]">
                     <Editor
                         height="100%"
-                        language={language === 'java' ? 'java' : language === 'python' ? 'python' : 'javascript'}
+                        language={language === 'java' ? 'java' : language === 'python' ? 'python' : language === 'cpp' ? 'cpp' : 'javascript'}
                         theme="vs-dark"
                         value={code}
                         onChange={(val) => setCode(val || '')}
@@ -474,7 +475,7 @@ export function DsaPanel({ sessionId }: DsaPanelProps) {
                         )}
                         {activeTab === 'evaluation' && evaluation && (
                             <div className="flex items-center space-x-3 pr-2">
-                                <span className="text-[10px] font-bold text-violet uppercase tracking-widest px-2 py-0.5 bg-violet/10 rounded-full">Score: {evaluation.overallScore}/100</span>
+                                <span className="text-[10px] font-bold text-violet uppercase tracking-widest px-2 py-0.5 bg-violet/10 rounded-full">Score: {evaluation.overallScore}{"/100"}</span>
                             </div>
                         )}
                         <div className="flex items-center space-x-2 pl-2 border-l border-white/5">
